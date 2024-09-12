@@ -18,6 +18,7 @@ use rgbstd::containers::BundleDichotomy;
 use rgbstd::containers::ConsignmentExt;
 use rgbstd::containers::Fascia;
 use rgbstd::containers::PubWitness;
+use rgbstd::containers::Transfer;
 use rgbstd::containers::TransitionInfoError;
 use rgbstd::interface::BuilderError;
 use rgbstd::persistence::ComposeError;
@@ -543,6 +544,7 @@ pub(crate) fn rgb_issue<S: StashProvider, H: StateProvider, P: IndexProvider>(
         }
     }
 
+    // TODO: set mainnet
     let contract = builder.issue_contract().unwrap();
     let contract_id = contract.contract_id();
 
@@ -550,6 +552,15 @@ pub(crate) fn rgb_issue<S: StashProvider, H: StateProvider, P: IndexProvider>(
     dbg!(status);
 
     return dbg!(contract_id);
+}
+
+
+pub(crate) fn rgb_transfer<S: StashProvider, H: StateProvider, P: IndexProvider>(
+    stock: &Stock<S, H, P>,
+    contract_id: ContractId,
+    outputs: &[XOutputSeal],
+) -> Transfer {
+    stock.transfer(contract_id, outputs, None).unwrap()
 }
 
 // fn load_contract_states(contract_yaml: &str) -> (

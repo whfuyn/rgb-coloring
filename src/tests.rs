@@ -7,6 +7,7 @@ use crate::api::{
     rgb_coin_select,
     rgb_compose,
     rgb_commit,
+    rgb_transfer,
 };
 use crate::types::{
     Outpoint,
@@ -109,7 +110,7 @@ fn get_stock() -> Stock {
 }
 
 #[test]
-fn test_rgb_issue() {
+fn test_rgb_workflow() {
     let contract_yaml = std::fs::read_to_string("DBG.yaml").unwrap();
 
     let mut stock = get_stock();
@@ -165,28 +166,40 @@ fn test_rgb_issue() {
     let spending_txid = tx.txid();
     dbg!(&spending_txid);
     resolver.add_tx(tx, 2, GENESIS_TIMESTAMP + 1);
-    stock.consume_fascia(fascia, resolver).unwrap();
+    stock.consume_fascia(fascia, &resolver).unwrap();
 
-    let available_utxos = [
+    let outputs = [
         Outpoint::new(spending_txid, 0),
         Outpoint::new(spending_txid, 1),
         // Outpoint::new(spending_txid, 2),
         // Outpoint::new(txid, 1),
         // Outpoint::new(txid, 2),
     ];
+    let consign = rgb_transfer(&stock, contract_id, &outputs);
+    dbg!(&consign);
 
-    let recipients = [
-        (Beneficiary::new_witness(0), 21),
-    ];
+    consign.validate(&resolver, true).unwrap();
 
-    let mut rgb_distribution = RgbDistribution::new();
-    for (recipient, amount) in recipients {
-        rgb_distribution
-            .add_recipient_for(contract_id, recipient, amount);
-    }
+    // let available_utxos = [
+    //     Outpoint::new(spending_txid, 0),
+    //     Outpoint::new(spending_txid, 1),
+    //     // Outpoint::new(spending_txid, 2),
+    //     // Outpoint::new(txid, 1),
+    //     // Outpoint::new(txid, 2),
+    // ];
 
-    let coins = rgb_coin_select(&stock, &available_utxos, &rgb_distribution);
-    let ti_list = rgb_compose(&stock, dbg!(coins), rgb_distribution, Beneficiary::WitnessVout(2));
+    // let recipients = [
+    //     (Beneficiary::new_witness(0), 21),
+    // ];
+
+    // let mut rgb_distribution = RgbDistribution::new();
+    // for (recipient, amount) in recipients {
+    //     rgb_distribution
+    //         .add_recipient_for(contract_id, recipient, amount);
+    // }
+
+    // let coins = rgb_coin_select(&stock, &available_utxos, &rgb_distribution);
+    // let ti_list = rgb_compose(&stock, dbg!(coins), rgb_distribution, Beneficiary::WitnessVout(2));
 
 }
 

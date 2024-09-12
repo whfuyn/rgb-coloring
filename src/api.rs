@@ -1,3 +1,4 @@
+use rgbstd::containers::Transfer;
 use rgbstd::persistence::{IndexProvider, StashProvider, StateProvider, Stock};
 use rgbstd::validation::ResolveWitness;
 
@@ -67,4 +68,26 @@ pub fn rgb_issue<S: StashProvider, H: StateProvider, P: IndexProvider>(
 ) -> ContractId {
     let contract_id = detail::rgb_issue(stock, contract_yaml, additional_genesis_allocation, resolver);
     contract_id.into()
+}
+
+pub(crate) fn rgb_transfer<S: StashProvider, H: StateProvider, P: IndexProvider>(
+    stock: &Stock<S, H, P>,
+    contract_id: ContractId,
+    outputs: &[Outpoint],
+) -> Transfer {
+    use rgbstd::OutputSeal;
+    use bp::seals::txout::CloseMethod;
+
+    let outputs = outputs
+        .into_iter()
+        .map(|o| {
+            o
+                .to_raw()
+                .map(|o|
+                    OutputSeal::new(CloseMethod::OpretFirst, o)
+                )
+        })
+        .collect::<Vec<_>>();
+
+    detail::rgb_transfer(stock, contract_id.to_raw(), &outputs)
 }
