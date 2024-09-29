@@ -114,19 +114,14 @@ fn get_stock() -> Stock {
 fn test_rgb_workflow() {
     let is_testnet = true;
 
-    let mut stock = get_stock();
-
     let tx = get_first_tx();
     let txid = tx.txid();
     dbg!(&txid);
 
-    let mut resolver = LnResolver::new();
-    resolver.add_tx(tx, 1, GENESIS_TIMESTAMP);
-
     let allocations = [
         (
             format!("opret1st:{txid}:0"),
-            100000000,
+            100,
         )
     ];
 
@@ -134,8 +129,13 @@ fn test_rgb_workflow() {
         "test", "TEST", "TestCoin", "For tests".into(), 8, allocations, is_testnet,
     );
     let contract_id: ContractId  = contract.contract_id().into();
+    dbg!(&contract_id);
 
-    stock.import_contract(contract, &resolver).unwrap();
+    let mut resolver = LnResolver::new();
+    resolver.add_tx(tx.clone(), 1, GENESIS_TIMESTAMP);
+
+    let mut stock = get_stock();
+    stock.import_contract(contract.clone(), &resolver).unwrap();
 
     // let contract_id = rgb_issue(&mut stock, &contract_yaml, allocations, &resolver);
 
@@ -146,8 +146,8 @@ fn test_rgb_workflow() {
     ];
 
     let recipients = [
-        (Beneficiary::new_witness(0), 10),
-        (Beneficiary::new_witness(1), 10),
+        (Beneficiary::new_witness(0), 50),
+        (Beneficiary::new_witness(1), 50),
     ];
 
     let mut rgb_assignments = RgbAssignments::new();
@@ -157,9 +157,11 @@ fn test_rgb_workflow() {
     }
 
     let coins = rgb_coin_select(&stock, &available_utxos, &rgb_assignments);
-    let ti_list = rgb_compose(&stock, dbg!(coins), rgb_assignments, Beneficiary::WitnessVout(2));
+    let ti_list = rgb_compose(&stock, dbg!(coins), rgb_assignments, Some(Beneficiary::WitnessVout(2)));
+    // let ti_list = rgb_compose(&stock, dbg!(coins), rgb_assignments, None);
     let (commitment, partial_fascia) = rgb_commit(&available_utxos, ti_list);
 
+    dbg!(&commitment);
     let mut tx = build_rgb_tx(&available_utxos, &[1000, 1000, 1000]);
     let opret_pos = tx
         .outputs()
@@ -170,7 +172,7 @@ fn test_rgb_workflow() {
 
     let fascia = partial_fascia.complete(&tx.consensus_serialize());
 
-    dbg!(&tx);
+    // dbg!(&tx);
     let spending_txid = tx.txid();
     dbg!(&spending_txid);
     resolver.add_tx(tx, 2, GENESIS_TIMESTAMP + 1);
@@ -178,12 +180,13 @@ fn test_rgb_workflow() {
 
     let outputs = [
         // Outpoint::new(spending_txid, 0),
-        // Outpoint::new(spending_txid, 1),
-        Outpoint::new(spending_txid, 2),
+        Outpoint::new(spending_txid, 1),
+        // Outpoint::new(spending_txid, 2),
         // Outpoint::new(txid, 1),
         // Outpoint::new(txid, 2),
     ];
     let consign = rgb_transfer(&stock, contract_id, &outputs);
+    dbg!(&consign.consignment_id());
     // dbg!(&consign);
 
     consign.validate(&resolver, is_testnet).unwrap();

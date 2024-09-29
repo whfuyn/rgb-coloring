@@ -56,7 +56,7 @@ pub fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
     prev_outputs: impl IntoIterator<Item = Outpoint>,
     rgb_assignments: RgbAssignments,
-    change_seal: Beneficiary,
+    change_seal: Option<Beneficiary>,
 ) -> Vec<TransitionInfo> {
     let prev_outputs = prev_outputs
         .into_iter()
@@ -69,7 +69,7 @@ pub fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
         stock,
         prev_outputs,
         rgb_assignments.0,
-        change_seal.to_raw(),
+        change_seal.map(ToRaw::to_raw),
     )
     .unwrap();
 

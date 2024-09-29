@@ -136,9 +136,10 @@ impl ToRaw for Beneficiary {
 
         let close_method = CloseMethod::OpretFirst;
         let seal: GraphSeal = match self {
-            Self::WitnessVout(vout) => GraphSeal::new_random_vout(close_method, vout),
+            // TODO: use seedable rng
+            Self::WitnessVout(vout) => GraphSeal::with_blinded_vout(close_method, vout, 0),
             Self::Outpoint(outpoint) => {
-                GraphSeal::new_random(close_method, outpoint.txid.0, outpoint.vout)
+                GraphSeal::with_blinding(close_method, outpoint.txid.0, outpoint.vout, 0)
             }
         };
 

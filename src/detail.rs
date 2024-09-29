@@ -38,6 +38,7 @@ use rgbstd::Amount;
 use rgbstd::BlindingFactor;
 use rgbstd::GenesisSeal;
 use rgbstd::Identity;
+use rgbstd::Operation;
 use rgbstd::Opout;
 use rgbstd::OutputSeal;
 use rgbstd::Precision;
@@ -159,7 +160,7 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
     prev_outputs: impl IntoIterator<Item = impl Into<XOutputSeal>>,
     rgb_assignments: RgbAssignments,
-    change_seal: Beneficiary,
+    change_seal: Option<Beneficiary>,
 ) -> Result<Vec<TransitionInfo>, StockError<S, H, P, ComposeError>> {
     let prev_outputs = prev_outputs
         .into_iter()
@@ -202,7 +203,7 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
                     // main_builder = main_builder.add_owned_state_raw(opout.ty, seal, state).unwrap();
 
                     main_builder = main_builder
-                        .add_owned_state_raw(opout.ty, change_seal, state)
+                        .add_owned_state_raw(opout.ty, change_seal.expect("no change seal"), state)
                         .unwrap();
                 } else if let PersistedState::Amount(value, _, _) = state {
                     sum_inputs += value;
@@ -219,7 +220,9 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
 
         for (beneficiary, amount) in rgb_assignment {
             // let blinding_beneficiary = pedersen_blinder(contract_id, assignment_id);
+            // TODO: use seedable rng
             let blinding_beneficiary = BlindingFactor::EMPTY;
+            // let blinding_beneficiary = BlindingFactor::random();
 
             main_builder = main_builder.add_fungible_state_raw(
                 assignment_id,
@@ -231,10 +234,11 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
 
         let change_amount = sum_inputs - amount_needed.into();
         if change_amount > Amount::ZERO {
+            // let blinding_change = BlindingFactor::random();
             let blinding_change = BlindingFactor::EMPTY;
             main_builder = main_builder.add_fungible_state_raw(
                 assignment_id,
-                change_seal,
+                change_seal.expect("no change seal for change amount"),
                 change_amount,
                 blinding_change,
             )?;
@@ -272,7 +276,7 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
 
                 blank_builder_opret = blank_builder_opret
                     .add_input(opout, state.clone())?
-                    .add_owned_state_raw(opout.ty, change_seal, state)?;
+                    .add_owned_state_raw(opout.ty, change_seal.expect("no change seal for blank transition"), state)?;
             }
         }
 
@@ -409,12 +413,14 @@ pub(crate) fn rgb_commit(
                 (protocol_id, message)
             })
             .collect();
+        dbg!(&mpc_messages);
 
         let min_depth = MPC_MINIMAL_DEPTH;
         let source = mpc::MultiSource {
             min_depth,
             messages: Confined::try_from(mpc_messages).unwrap(),
-            static_entropy: None,
+            // TODO: set entropy
+            static_entropy: Some(0),
         };
         mpc::MerkleTree::try_commit(&source).unwrap()
     };
