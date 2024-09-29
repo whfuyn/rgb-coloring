@@ -5,13 +5,16 @@ edition = "2021"
 
 [dependencies]
 rgb-std = { version = "0.11.0-beta.8", features = ["fs"]}
+rgb-schemata = "0.11.0-beta.8"
+rgb-interfaces = "0.11.0-beta.8"
+
 strict_types = { version = "2.7.0", features = ["serde"] }
 strict_encoding = "2.7.0"
 amplify = "4.7.0"
 bp-core = "0.11.0-beta.8"
 bp-std = "0.11.0-beta.8"
 commit_verify = "0.11.0-beta.8"
-serde_yaml = "0.9.19"
+# serde_yaml = "0.9.19"
 
 # move to dev dep
 tempfile = "3"

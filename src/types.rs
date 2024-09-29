@@ -1,7 +1,7 @@
 // TODO: consider if it's a better option to wrap those types or we should just expose them
 
 pub(crate) use crate::detail::{
-    Beneficiary as RawBeneficiary, RgbDistribution as RawRgbDistribution,
+    Beneficiary as RawBeneficiary, RgbAssignments as RawRgbAssignments,
 };
 pub(crate) use rgbstd::{
     containers::TransitionInfo as RawTransitionInfo, ContractId as RawContractId, Txid as RawTxid,
@@ -181,9 +181,9 @@ impl ToRaw for RgbCoin {
 }
 
 #[derive(Debug, Clone)]
-pub struct RgbDistribution(pub(crate) RawRgbDistribution);
+pub struct RgbAssignments(pub(crate) RawRgbAssignments);
 
-impl RgbDistribution {
+impl RgbAssignments {
     pub fn new() -> Self {
         Self(Default::default())
     }
@@ -206,16 +206,16 @@ impl RgbDistribution {
     }
 }
 
-impl ToRaw for RgbDistribution {
-    type RawType = RawRgbDistribution;
+impl ToRaw for RgbAssignments {
+    type RawType = RawRgbAssignments;
 
     fn to_raw(self) -> Self::RawType {
         self.0
     }
 }
 
-impl<'a> ToRaw for &'a RgbDistribution {
-    type RawType = &'a RawRgbDistribution;
+impl<'a> ToRaw for &'a RgbAssignments {
+    type RawType = &'a RawRgbAssignments;
 
     fn to_raw(self) -> Self::RawType {
         &self.0

@@ -1,6 +1,8 @@
 use bp::{*, Tx as BpTx, Outpoint as BpOutpoint};
+use ifaces::IssuerWrapper;
 use rgbstd::persistence::Stock;
-use rgbstd::containers::UniversalFile;
+use rgbstd::containers::{ConsignmentExt, UniversalFile};
+// use rgbstd::ContractId;
 
 use crate::api::{
     rgb_issue,
@@ -8,11 +10,13 @@ use crate::api::{
     rgb_compose,
     rgb_commit,
     rgb_transfer,
+    rgb_balance,
 };
 use crate::types::{
     Outpoint,
-    RgbDistribution,
+    RgbAssignments,
     Beneficiary,
+    ContractId,
 };
 use crate::resolver::LnResolver;
 use crate::ToRaw;
@@ -85,33 +89,30 @@ fn build_rgb_tx(inputs: &[Outpoint], outputs: &[u64]) -> BpTx {
 }
 
 fn get_stock() -> Stock {
-    use rgbstd::persistence::fs::FsBinStore;
-    use tempfile::tempdir;
+    // use rgbstd::persistence::fs::FsBinStore;
+    // use tempfile::tempdir;
+    use schemata::NonInflatableAsset;
 
-    let data_dir = tempdir().unwrap();
-    let stock_path = data_dir.into_path();
+    // let data_dir = tempdir().unwrap();
+    // let stock_path = data_dir.into_path();
 
     // let provider = FsBinStore::new(stock_path.clone()).unwrap();
     // Stock::load(provider, true).unwrap();
 
-    let provider = FsBinStore::new(stock_path).unwrap();
+    // let provider = FsBinStore::new(stock_path).unwrap();
     let mut stock = Stock::in_memory();
-    stock.make_persistent(provider, true).unwrap();
+    // stock.make_persistent(provider, true).unwrap();
 
-    let UniversalFile::Kit(kit) = UniversalFile::load_file("NonInflatableAssets.rgb").unwrap() else {
-        panic!();
-    };
-
-    let validated_kit = kit.validate().unwrap();
-    stock.import_kit(validated_kit).unwrap();
-
+    stock.import_kit(NonInflatableAsset::kit()).unwrap();
 
     stock
 }
 
+// fn get_rgb20_contract() -> 
+
 #[test]
 fn test_rgb_workflow() {
-    let contract_yaml = std::fs::read_to_string("DBG.yaml").unwrap();
+    let is_testnet = true;
 
     let mut stock = get_stock();
 
@@ -122,14 +123,21 @@ fn test_rgb_workflow() {
     let mut resolver = LnResolver::new();
     resolver.add_tx(tx, 1, GENESIS_TIMESTAMP);
 
-    let allocation = [
+    let allocations = [
         (
             format!("opret1st:{txid}:0"),
             100000000,
         )
     ];
 
-    let contract_id = rgb_issue(&mut stock, &contract_yaml, allocation, &resolver);
+    let contract = rgb_issue(
+        "test", "TEST", "TestCoin", "For tests".into(), 8, allocations, is_testnet,
+    );
+    let contract_id: ContractId  = contract.contract_id().into();
+
+    stock.import_contract(contract, &resolver).unwrap();
+
+    // let contract_id = rgb_issue(&mut stock, &contract_yaml, allocations, &resolver);
 
     let available_utxos = [
         Outpoint::new(txid, 0),
@@ -142,14 +150,14 @@ fn test_rgb_workflow() {
         (Beneficiary::new_witness(1), 10),
     ];
 
-    let mut rgb_distribution = RgbDistribution::new();
+    let mut rgb_assignments = RgbAssignments::new();
     for (recipient, amount) in recipients {
-        rgb_distribution
+        rgb_assignments
             .add_recipient_for(contract_id, recipient, amount);
     }
 
-    let coins = rgb_coin_select(&stock, &available_utxos, &rgb_distribution);
-    let ti_list = rgb_compose(&stock, dbg!(coins), rgb_distribution, Beneficiary::WitnessVout(2));
+    let coins = rgb_coin_select(&stock, &available_utxos, &rgb_assignments);
+    let ti_list = rgb_compose(&stock, dbg!(coins), rgb_assignments, Beneficiary::WitnessVout(2));
     let (commitment, partial_fascia) = rgb_commit(&available_utxos, ti_list);
 
     let mut tx = build_rgb_tx(&available_utxos, &[1000, 1000, 1000]);
@@ -169,16 +177,18 @@ fn test_rgb_workflow() {
     stock.consume_fascia(fascia, &resolver).unwrap();
 
     let outputs = [
-        Outpoint::new(spending_txid, 0),
-        Outpoint::new(spending_txid, 1),
-        // Outpoint::new(spending_txid, 2),
+        // Outpoint::new(spending_txid, 0),
+        // Outpoint::new(spending_txid, 1),
+        Outpoint::new(spending_txid, 2),
         // Outpoint::new(txid, 1),
         // Outpoint::new(txid, 2),
     ];
     let consign = rgb_transfer(&stock, contract_id, &outputs);
-    dbg!(&consign);
+    // dbg!(&consign);
 
-    consign.validate(&resolver, true).unwrap();
+    consign.validate(&resolver, is_testnet).unwrap();
+
+    dbg!(rgb_balance(&stock, contract_id, &outputs));
 
     // let available_utxos = [
     //     Outpoint::new(spending_txid, 0),
@@ -192,14 +202,14 @@ fn test_rgb_workflow() {
     //     (Beneficiary::new_witness(0), 21),
     // ];
 
-    // let mut rgb_distribution = RgbDistribution::new();
+    // let mut rgb_assignments = RgbAssignments::new();
     // for (recipient, amount) in recipients {
-    //     rgb_distribution
+    //     rgb_assignments
     //         .add_recipient_for(contract_id, recipient, amount);
     // }
 
-    // let coins = rgb_coin_select(&stock, &available_utxos, &rgb_distribution);
-    // let ti_list = rgb_compose(&stock, dbg!(coins), rgb_distribution, Beneficiary::WitnessVout(2));
+    // let coins = rgb_coin_select(&stock, &available_utxos, &rgb_assignments);
+    // let ti_list = rgb_compose(&stock, dbg!(coins), rgb_assignments, Beneficiary::WitnessVout(2));
 
 }
 
