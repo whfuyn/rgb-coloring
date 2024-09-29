@@ -2,6 +2,8 @@
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+// Be careful when using HashMap/HashSet, its iteration order is unspecified,
+// which might break coloring consistency.
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -18,6 +20,7 @@ use commit_verify::TryCommitVerify;
 use ifaces::IssuerWrapper;
 use ifaces::Rgb20;
 use ifaces::SchemaIssuer;
+use rand::Rng;
 use rgbstd::containers::BundleDichotomy;
 use rgbstd::containers::ConsignmentExt;
 use rgbstd::containers::Fascia;
@@ -61,7 +64,10 @@ use strict_types::value::typify::TypedVal;
 use bp::{ConsensusDecode as _, Tx};
 use strict_types::StrictVal;
 
-pub(crate) type RgbAssignments = HashMap<ContractId, HashMap<Beneficiary, u64>>;
+use crate::ToRaw;
+
+
+pub(crate) type RgbAssignments = BTreeMap<ContractId, BTreeMap<Beneficiary, u64>>;
 pub(crate) type Beneficiary = BuilderSeal<GraphSeal>;
 
 pub(crate) fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
@@ -96,7 +102,7 @@ pub(crate) fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
 pub(crate) fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
     available_utxos: &[XOutpoint],
-    rgb_assignments: &RgbAssignments,
+    rgb_assignments: &crate::types::RgbAssignments,
 ) -> Vec<XOutputSeal> {
     // Only support RGB20Fixed for now.
     let iface_name = TypeName::from("RGB20Fixed");
@@ -110,11 +116,11 @@ pub(crate) fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvid
         .unwrap();
 
     let mut selected_prev_outputs: Vec<XOutputSeal> = vec![];
-    for (&contract_id, rgb_assignment) in rgb_assignments {
+    for (&contract_id, rgb_assignment) in &rgb_assignments.0 {
         let total_amount_needed: u64 = rgb_assignment.iter().map(|(_, amount)| *amount).sum();
 
         let contract = stock
-            .contract_iface(contract_id, iface_name.clone())
+            .contract_iface(contract_id.to_raw(), iface_name.clone())
             .unwrap();
         // .map_err(|e| e.to_string())?;
 
@@ -156,11 +162,12 @@ pub(crate) fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvid
     selected_prev_outputs
 }
 
-pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
+pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider, R: Rng>(
     stock: &Stock<S, H, P>,
     prev_outputs: impl IntoIterator<Item = impl Into<XOutputSeal>>,
-    rgb_assignments: RgbAssignments,
+    rgb_assignments: BTreeMap<ContractId, BTreeMap<Beneficiary, u64>>,
     change_seal: Option<Beneficiary>,
+    rng: &mut R,
 ) -> Result<Vec<TransitionInfo>, StockError<S, H, P, ComposeError>> {
     let prev_outputs = prev_outputs
         .into_iter()
@@ -220,9 +227,7 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
 
         for (beneficiary, amount) in rgb_assignment {
             // let blinding_beneficiary = pedersen_blinder(contract_id, assignment_id);
-            // TODO: use seedable rng
-            let blinding_beneficiary = BlindingFactor::EMPTY;
-            // let blinding_beneficiary = BlindingFactor::random();
+            let blinding_beneficiary = get_blinding_factor(rng);
 
             main_builder = main_builder.add_fungible_state_raw(
                 assignment_id,
@@ -235,7 +240,7 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
         let change_amount = sum_inputs - amount_needed.into();
         if change_amount > Amount::ZERO {
             // let blinding_change = BlindingFactor::random();
-            let blinding_change = BlindingFactor::EMPTY;
+            let blinding_change = get_blinding_factor(rng);
             main_builder = main_builder.add_fungible_state_raw(
                 assignment_id,
                 change_seal.expect("no change seal for change amount"),
@@ -413,7 +418,6 @@ pub(crate) fn rgb_commit(
                 (protocol_id, message)
             })
             .collect();
-        dbg!(&mpc_messages);
 
         let min_depth = MPC_MINIMAL_DEPTH;
         let source = mpc::MultiSource {
@@ -507,4 +511,24 @@ pub(crate) fn rgb_transfer<S: StashProvider, H: StateProvider, P: IndexProvider>
     outputs: &[XOutputSeal],
 ) -> Transfer {
     stock.transfer(contract_id, outputs, None).unwrap()
+}
+
+
+#[inline]
+fn get_blinding_factor<R: Rng>(rng: &mut R) -> BlindingFactor {
+    let mut failed = 0;
+    loop {
+        let blind: [u8; 32] = rng.gen();
+        match BlindingFactor::try_from(blind) {
+            Ok(blind) => break blind,
+            Err(_) => {
+                if failed < 100 {
+                    failed += 1;
+                    continue
+                } else {
+                    panic!("RNG is broken");
+                }
+            }
+        }
+    }
 }

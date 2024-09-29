@@ -1,4 +1,5 @@
 use bp::dbc::Method;
+use rand::{Rng, SeedableRng};
 use rgbstd::containers::{Transfer, ValidContract};
 use rgbstd::persistence::{IndexProvider, StashProvider, StateProvider, Stock};
 use rgbstd::{Identity, OutputSeal, Precision};
@@ -40,7 +41,7 @@ pub fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvider>(
     let available_utxos: Vec<RawOutpoint> =
         available_utxos.iter().copied().map(ToRaw::to_raw).collect();
 
-    let coins = detail::rgb_coin_select(stock, &available_utxos, rgb_assignments.to_raw());
+    let coins = detail::rgb_coin_select(stock, &available_utxos, rgb_assignments);
     coins
         .into_iter()
         .map(|coin| {
@@ -57,7 +58,11 @@ pub fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
     prev_outputs: impl IntoIterator<Item = Outpoint>,
     rgb_assignments: RgbAssignments,
     change_seal: Option<Beneficiary>,
+    // TODO: or [u8; 32]?
+    blinding_seed: u64,
 ) -> Vec<TransitionInfo> {
+    let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(blinding_seed);
+
     let prev_outputs = prev_outputs
         .into_iter()
         .map(|o| {
@@ -65,11 +70,15 @@ pub fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
             XChain::Bitcoin(o)
         });
 
+    let rgb_assignments = rgb_assignments.to_raw_with_bliding_rng(&mut rng);
+    let change_seal = change_seal.map(|s| s.to_raw_with_blinding(rng.gen()));
+    
     let transition_info_list = detail::rgb_compose(
         stock,
         prev_outputs,
-        rgb_assignments.0,
-        change_seal.map(ToRaw::to_raw),
+        rgb_assignments,
+        change_seal,
+        &mut rng,
     )
     .unwrap();
 

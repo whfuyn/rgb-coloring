@@ -1,11 +1,15 @@
 // TODO: consider if it's a better option to wrap those types or we should just expose them
 
+use std::collections::BTreeMap;
+use std::collections::HashMap;
+
 pub(crate) use crate::detail::{
     Beneficiary as RawBeneficiary, RgbAssignments as RawRgbAssignments,
 };
+use rand::Rng;
 pub(crate) use rgbstd::{
     containers::TransitionInfo as RawTransitionInfo, ContractId as RawContractId, Txid as RawTxid,
-    XChain, XOutpoint as RawOutpoint, XOutputSeal as RawCoin,
+    XChain, XOutpoint as RawOutpoint, 
 };
 
 pub trait ToRaw {
@@ -25,8 +29,6 @@ macro_rules! impl_from_raw {
     };
 }
 
-impl_from_raw!(Txid);
-impl_from_raw!(ContractId);
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Txid(pub(crate) RawTxid);
@@ -37,17 +39,13 @@ impl From<[u8; 32]> for Txid {
     }
 }
 
-// impl From<RawTxid> for Txid {
-//     fn from(value: RawTxid) -> Self {
-//         Self(value)
-//     }
-// }
-
 impl Into<[u8; 32]> for Txid {
     fn into(self) -> [u8; 32] {
         self.0.as_ref().to_byte_array()
     }
 }
+
+impl_from_raw!(Txid);
 
 impl ToRaw for Txid {
     type RawType = RawTxid;
@@ -59,12 +57,6 @@ impl ToRaw for Txid {
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct ContractId(pub(crate) RawContractId);
-
-// impl From<RawContractId> for ContractId {
-//     fn from(value: RawContractId) -> Self {
-//         Self(value)
-//     }
-// }
 
 impl From<[u8; 32]> for ContractId {
     fn from(value: [u8; 32]) -> Self {
@@ -78,6 +70,8 @@ impl Into<[u8; 32]> for ContractId {
     }
 }
 
+impl_from_raw!(ContractId);
+
 impl ToRaw for ContractId {
     type RawType = RawContractId;
 
@@ -86,7 +80,8 @@ impl ToRaw for ContractId {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
+
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct Outpoint {
     pub txid: Txid,
     pub vout: u32,
@@ -111,7 +106,8 @@ impl ToRaw for Outpoint {
     }
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum Beneficiary {
     WitnessVout(u32),
     Outpoint(Outpoint),
@@ -125,27 +121,23 @@ impl Beneficiary {
     pub fn new_outpoint(outpoint: Outpoint) -> Self {
         Self::Outpoint(outpoint)
     }
-}
 
-impl ToRaw for Beneficiary {
-    type RawType = RawBeneficiary;
-
-    fn to_raw(self) -> Self::RawType {
+    pub(crate) fn to_raw_with_blinding(self, blinding: u64) -> RawBeneficiary {
         use bp::seals::txout::CloseMethod;
         use rgbstd::GraphSeal;
 
         let close_method = CloseMethod::OpretFirst;
         let seal: GraphSeal = match self {
-            // TODO: use seedable rng
-            Self::WitnessVout(vout) => GraphSeal::with_blinded_vout(close_method, vout, 0),
+            Self::WitnessVout(vout) => GraphSeal::with_blinded_vout(close_method, vout, blinding),
             Self::Outpoint(outpoint) => {
-                GraphSeal::with_blinding(close_method, outpoint.txid.0, outpoint.vout, 0)
+                GraphSeal::with_blinding(close_method, outpoint.txid.0, outpoint.vout, blinding)
             }
         };
 
         From::<XChain<GraphSeal>>::from(XChain::with(rgbstd::Layer1::Bitcoin, seal))
     }
 }
+
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TransitionInfo(pub(crate) RawTransitionInfo);
@@ -158,31 +150,10 @@ impl ToRaw for TransitionInfo {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct RgbCoin(pub(crate) RawCoin);
 
-impl RgbCoin {
-    pub fn outpoint(&self) -> Outpoint {
-        let xoutpoint = self.0.to_outpoint();
-        let outpoint = xoutpoint.as_reduced_unsafe();
-
-        Outpoint {
-            txid: Txid(outpoint.txid),
-            vout: outpoint.vout.into_u32(),
-        }
-    }
-}
-
-impl ToRaw for RgbCoin {
-    type RawType = RawCoin;
-
-    fn to_raw(self) -> Self::RawType {
-        self.0
-    }
-}
-
+// Use BTreeMap to have a consistent order for generating blinding factors
 #[derive(Debug, Clone)]
-pub struct RgbAssignments(pub(crate) RawRgbAssignments);
+pub struct RgbAssignments(pub(crate) BTreeMap<ContractId, BTreeMap<Beneficiary, u64>>);
 
 impl RgbAssignments {
     pub fn new() -> Self {
@@ -195,30 +166,28 @@ impl RgbAssignments {
         recipient: Beneficiary,
         amount: u64,
     ) {
-        let contract_id = contract_id.to_raw();
         let ent = self
             .0
             .entry(contract_id)
             .or_default()
-            .entry(recipient.to_raw())
+            .entry(recipient)
             .or_default();
 
         *ent = ent.checked_add(amount).expect("rgb amount overflow");
     }
-}
 
-impl ToRaw for RgbAssignments {
-    type RawType = RawRgbAssignments;
-
-    fn to_raw(self) -> Self::RawType {
+    pub fn to_raw_with_bliding_rng<R: Rng>(self, rng: &mut R) -> RawRgbAssignments {
         self.0
-    }
-}
-
-impl<'a> ToRaw for &'a RgbAssignments {
-    type RawType = &'a RawRgbAssignments;
-
-    fn to_raw(self) -> Self::RawType {
-        &self.0
+            .into_iter()
+            .map(|(cid, assignments)| {
+                let assignments: BTreeMap<RawBeneficiary, u64> = assignments
+                    .into_iter()
+                    .map(|(b, v)| {
+                        (b.to_raw_with_blinding(rng.gen()), v)
+                    })
+                    .collect();
+                (cid.to_raw(), assignments)
+            })
+            .collect()
     }
 }

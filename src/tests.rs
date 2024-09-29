@@ -1,7 +1,8 @@
 use bp::{*, Tx as BpTx, Outpoint as BpOutpoint};
 use ifaces::IssuerWrapper;
 use rgbstd::persistence::Stock;
-use rgbstd::containers::{ConsignmentExt, UniversalFile};
+use rgbstd::containers::{ConsignmentExt, Transfer, UniversalFile, ValidConsignment, ValidContract, ValidTransfer};
+use rgbstd::BlindingFactor;
 // use rgbstd::ContractId;
 
 use crate::api::{
@@ -50,7 +51,7 @@ fn get_first_tx() -> BpTx {
     tx
 }
 
-fn build_rgb_tx(inputs: &[Outpoint], outputs: &[u64]) -> BpTx {
+fn build_rgb_tx(inputs: &[Outpoint], outputs_num: usize, commitment: &[u8; 32]) -> BpTx {
     let inputs = inputs
         .iter()
         .map(|o| {
@@ -63,18 +64,16 @@ fn build_rgb_tx(inputs: &[Outpoint], outputs: &[u64]) -> BpTx {
         })
         .collect::<Vec<_>>();
 
-    let mut outputs = outputs
-        .iter()
-        .map(|v| {
-            TxOut {
-                value: Sats::from_sats(*v),
-                script_pubkey: ScriptPubkey::new(),
-            }
-        })
-        .collect::<Vec<_>>();
+    let mut outputs = vec![
+        TxOut {
+            value: Sats::from_sats(546u64),
+            script_pubkey: ScriptPubkey::new(),
+        };
+        outputs_num
+    ];
     let opret = TxOut {
         value: Sats::ZERO,
-        script_pubkey: ScriptPubkey::op_return(&[]),
+        script_pubkey: ScriptPubkey::op_return(commitment),
     };
     outputs.push(opret);
 
@@ -157,19 +156,11 @@ fn test_rgb_workflow() {
     }
 
     let coins = rgb_coin_select(&stock, &available_utxos, &rgb_assignments);
-    let ti_list = rgb_compose(&stock, dbg!(coins), rgb_assignments, Some(Beneficiary::WitnessVout(2)));
+    let ti_list = rgb_compose(&stock, dbg!(coins), rgb_assignments, Some(Beneficiary::WitnessVout(2)), 0);
     // let ti_list = rgb_compose(&stock, dbg!(coins), rgb_assignments, None);
     let (commitment, partial_fascia) = rgb_commit(&available_utxos, ti_list);
 
-    dbg!(&commitment);
-    let mut tx = build_rgb_tx(&available_utxos, &[1000, 1000, 1000]);
-    let opret_pos = tx
-        .outputs()
-        .position(|o| o.script_pubkey.is_op_return())
-        .unwrap();
-
-    tx.outputs[opret_pos].script_pubkey = ScriptPubkey::op_return(&commitment);
-
+    let tx = build_rgb_tx(&available_utxos, 3, &commitment);
     let fascia = partial_fascia.complete(&tx.consensus_serialize());
 
     // dbg!(&tx);
@@ -216,3 +207,85 @@ fn test_rgb_workflow() {
 
 }
 
+#[test]
+fn test_coloring_consistency() {
+    let is_testnet = true;
+
+    let genesis_tx = get_first_tx();
+    let genesis_txid = genesis_tx.txid();
+
+    let allocations = [
+        (
+            format!("opret1st:{genesis_txid}:0"),
+            100,
+        )
+    ];
+
+    let contract = rgb_issue(
+        "test", "TEST", "TestCoin", "For tests".into(), 8, allocations, is_testnet,
+    );
+
+    for blinding_seed in 0..10 {
+        let (first_commitment, first_consignment) = basic_transfer(genesis_tx.clone(), contract.clone(), blinding_seed, is_testnet);
+        let (second_commitment, second_consignment) = basic_transfer(genesis_tx.clone(), contract.clone(), blinding_seed, is_testnet);
+
+        assert_eq!(first_commitment, second_commitment);
+        assert_eq!(first_consignment.consignment_id(), second_consignment.consignment_id());
+    }
+}
+
+fn basic_transfer(
+    genesis_tx: Tx,
+    contract: ValidContract,
+    blinding_seed: u64,
+    is_testnet: bool,
+) -> ([u8; 32], ValidTransfer) {
+    let genesis_txid = genesis_tx.txid();
+    let contract_id: ContractId  = contract.contract_id().into();
+
+    let mut resolver = LnResolver::new();
+    resolver.add_tx(genesis_tx.clone(), 1, GENESIS_TIMESTAMP);
+
+    let mut stock = get_stock();
+    stock.import_contract(contract.clone(), &resolver).unwrap();
+
+    let recipients = [
+        (Beneficiary::new_witness(0), 50),
+        (Beneficiary::new_witness(1), 50),
+    ];
+    let mut rgb_assignments = RgbAssignments::new();
+    for (recipient, amount) in recipients {
+        rgb_assignments
+            .add_recipient_for(contract_id, recipient, amount);
+    }
+
+    let available_utxos = [
+        Outpoint::new(genesis_txid, 0),
+    ];
+    let prev_outputs = rgb_coin_select(&stock, &available_utxos, &rgb_assignments);
+    let ti_list = rgb_compose(&stock, prev_outputs, rgb_assignments, Some(Beneficiary::WitnessVout(2)), blinding_seed);
+    let (commitment, partial_fascia) = rgb_commit(&available_utxos, ti_list);
+
+    let spending_tx = build_rgb_tx(&available_utxos, 3, &commitment);
+    let spending_txid = spending_tx.txid();
+
+    let fascia = partial_fascia.complete(&spending_tx.consensus_serialize());
+
+    resolver.add_tx(spending_tx, 2, GENESIS_TIMESTAMP + 1);
+    stock.consume_fascia(fascia, &resolver).unwrap();
+
+    let outputs = [
+        // Outpoint::new(spending_txid, 0),
+        Outpoint::new(spending_txid, 1),
+        // Outpoint::new(spending_txid, 2),
+    ];
+    let transfer = rgb_transfer(&stock, contract_id, &outputs);
+
+    let valid_transfer = transfer.validate(&resolver, is_testnet).unwrap();
+
+    let balance = rgb_balance(&stock, contract_id, &outputs);
+
+    assert_eq!(balance, 50);
+
+    (commitment, valid_transfer)
+}
