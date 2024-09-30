@@ -107,8 +107,6 @@ fn get_stock() -> Stock {
     stock
 }
 
-// fn get_rgb20_contract() -> 
-
 #[test]
 fn test_rgb_workflow() {
     let is_testnet = true;
@@ -250,8 +248,8 @@ fn basic_transfer(
     stock.import_contract(contract.clone(), &resolver).unwrap();
 
     let recipients = [
-        (Beneficiary::new_witness(0), 50),
-        (Beneficiary::new_witness(1), 50),
+        (Beneficiary::new_witness(0), 20),
+        (Beneficiary::new_witness(1), 80),
     ];
     let mut rgb_assignments = RgbAssignments::new();
     for (recipient, amount) in recipients {
@@ -272,11 +270,11 @@ fn basic_transfer(
     let fascia = partial_fascia.complete(&spending_tx.consensus_serialize());
 
     resolver.add_tx(spending_tx, 2, GENESIS_TIMESTAMP + 1);
-    stock.consume_fascia(fascia, &resolver).unwrap();
+    stock.consume_fascia(fascia.clone(), &resolver).unwrap();
 
     let outputs = [
-        // Outpoint::new(spending_txid, 0),
-        Outpoint::new(spending_txid, 1),
+        Outpoint::new(spending_txid, 0),
+        // Outpoint::new(spending_txid, 1),
         // Outpoint::new(spending_txid, 2),
     ];
     let transfer = rgb_transfer(&stock, contract_id, &outputs);
@@ -285,7 +283,22 @@ fn basic_transfer(
 
     let balance = rgb_balance(&stock, contract_id, &outputs);
 
-    assert_eq!(balance, 50);
+    assert_eq!(balance, 20);
+
+    {
+        let outputs = [
+            // Outpoint::new(spending_txid, 0),
+            Outpoint::new(spending_txid, 1),
+            // Outpoint::new(spending_txid, 2),
+        ];
+
+        let mut stock = get_stock();
+        stock.accept_transfer(valid_transfer.clone(), resolver).unwrap();
+
+        let balance = rgb_balance(&stock, contract_id, &outputs);
+
+        assert_eq!(balance, 80);
+    }
 
     (commitment, valid_transfer)
 }

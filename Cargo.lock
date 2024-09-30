@@ -16,6 +16,7 @@ dependencies = [
  "half",
  "paste",
  "ripemd",
+ "serde",
  "sha2",
  "strict_encoding",
  "strict_types",
@@ -221,6 +222,7 @@ dependencies = [
  "chrono",
  "commit_verify",
  "secp256k1",
+ "serde",
  "strict_encoding",
  "strict_types",
 ]
@@ -237,6 +239,7 @@ dependencies = [
  "bp-seals",
  "commit_verify",
  "getrandom",
+ "serde",
  "single_use_seals",
  "strict_encoding",
  "strict_types",
@@ -254,6 +257,7 @@ dependencies = [
  "bp-consensus",
  "commit_verify",
  "secp256k1",
+ "serde",
  "strict_encoding",
 ]
 
@@ -296,6 +300,7 @@ dependencies = [
  "bp-dbc",
  "commit_verify",
  "rand",
+ "serde",
  "single_use_seals",
  "strict_encoding",
 ]
@@ -354,6 +359,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-targets",
 ]
@@ -381,6 +387,7 @@ dependencies = [
  "commit_encoding_derive",
  "rand",
  "ripemd",
+ "serde",
  "sha2",
  "strict_encoding",
  "strict_types",
@@ -736,8 +743,11 @@ dependencies = [
  "bp-core",
  "bp-std",
  "commit_verify",
+ "rand",
+ "rand_chacha",
+ "rgb-interfaces",
+ "rgb-schemata",
  "rgb-std",
- "serde_yaml",
  "strict_encoding",
  "strict_types",
  "tempfile",
@@ -758,7 +768,27 @@ dependencies = [
  "getrandom",
  "mime",
  "secp256k1-zkp",
+ "serde",
  "single_use_seals",
+ "strict_encoding",
+ "strict_types",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "rgb-interfaces"
+version = "0.11.0-beta.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37dea80df39205f6c1d0fc4a6d2ea0401d5e6b9b28ed852b707cb01517b3c991"
+dependencies = [
+ "aluvm",
+ "amplify",
+ "bp-core",
+ "chrono",
+ "getrandom",
+ "rgb-std",
+ "serde_json",
+ "sha2",
  "strict_encoding",
  "strict_types",
  "wasm-bindgen",
@@ -780,6 +810,26 @@ dependencies = [
  "percent-encoding",
  "rand",
  "rgb-core",
+ "serde",
+ "strict_encoding",
+ "strict_types",
+]
+
+[[package]]
+name = "rgb-schemata"
+version = "0.11.0-beta.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61aa7e109d0b8a73ff900c0af1cf256a9c4b14ded46fd3aa47540f461f0aa05d"
+dependencies = [
+ "aluvm",
+ "amplify",
+ "bp-core",
+ "chrono",
+ "rgb-interfaces",
+ "rgb-std",
+ "serde",
+ "serde_json",
+ "sha2",
  "strict_encoding",
  "strict_types",
 ]
@@ -804,6 +854,7 @@ dependencies = [
  "rand",
  "rgb-core",
  "rgb-invoice",
+ "serde",
  "strict_encoding",
  "strict_types",
  "wasm-bindgen",
@@ -820,9 +871,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.36"
+version = "0.38.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f55e80d50763938498dd5ebb18647174e0c76dc38c5505294bb224624f30f36"
+checksum = "8acb788b847c24f28525660c4d7758620a7210875711f79e7f663cc152726811"
 dependencies = [
  "bitflags 2.6.0",
  "errno",
@@ -845,6 +896,7 @@ checksum = "0e0cc0f1cf93f4969faf3ea1c7d8a9faed25918d96affa959720823dfe86d4f3"
 dependencies = [
  "rand",
  "secp256k1-sys",
+ "serde",
 ]
 
 [[package]]
@@ -866,6 +918,7 @@ dependencies = [
  "rand",
  "secp256k1",
  "secp256k1-zkp-sys",
+ "serde",
 ]
 
 [[package]]
@@ -1055,9 +1108,9 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.12.0"
+version = "3.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04cbcdd0c794ebb0d4cf35e88edd2f7d2c4c3e9a5a6dab322839b321c6a87a64"
+checksum = "f0f2c9fc62d0beef6951ccffd757e241266a2c833136efbe35af6cd2567dca5b"
 dependencies = [
  "cfg-if",
  "fastrand",

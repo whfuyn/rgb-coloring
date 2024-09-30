@@ -176,7 +176,7 @@ impl RgbAssignments {
         *ent = ent.checked_add(amount).expect("rgb amount overflow");
     }
 
-    pub fn to_raw_with_bliding_rng<R: Rng>(self, rng: &mut R) -> RawRgbAssignments {
+    pub(crate) fn to_raw_with_bliding_rng<R: Rng>(self, rng: &mut R) -> RawRgbAssignments {
         self.0
             .into_iter()
             .map(|(cid, assignments)| {

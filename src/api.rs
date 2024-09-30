@@ -89,6 +89,7 @@ pub fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
 }
 
 pub fn rgb_commit(
+    // The order of txins must not be changed after `rgb_commit`
     finalized_txins: &[Outpoint],
     transition_info_list: Vec<TransitionInfo>,
 ) -> ([u8; 32], PartialFascia) {
@@ -108,7 +109,7 @@ pub fn rgb_commit(
     (commitment.to_byte_array(), partial_fascia)
 }
 
-pub(crate) fn rgb_transfer<S: StashProvider, H: StateProvider, P: IndexProvider>(
+pub fn rgb_transfer<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
     contract_id: ContractId,
     outputs: &[Outpoint],

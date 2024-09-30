@@ -522,7 +522,7 @@ fn get_blinding_factor<R: Rng>(rng: &mut R) -> BlindingFactor {
         match BlindingFactor::try_from(blind) {
             Ok(blind) => break blind,
             Err(_) => {
-                if failed < 100 {
+                if failed < 5 {
                     failed += 1;
                     continue
                 } else {
