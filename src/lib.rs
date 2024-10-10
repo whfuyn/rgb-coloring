@@ -5,7 +5,7 @@
 mod api;
 mod detail;
 mod types;
-mod resolver;
+mod resolvers;
 mod error;
 
 // #[cfg(test)]
@@ -19,8 +19,8 @@ pub mod prelude {
         Beneficiary, ContractId, Outpoint, RgbAssignments, TransitionInfo, Txid,
     };
 
-    pub use crate::api::{rgb_coin_select, rgb_commit, rgb_compose, rgb_balance};
-    pub use crate::resolver::LnResolver;
+    pub use crate::api::{rgb_coin_select, rgb_commit, rgb_compose, rgb_balance, rgb_transfer, rgb_issue, get_empty_stock, rgb_export_contract};
+    pub use crate::resolvers::{LnResolver, LocalResolver};
     pub use strict_encoding::{StrictDeserialize, StrictSerialize};
     pub use rgbstd::{
         persistence::Stock,

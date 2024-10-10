@@ -2,8 +2,6 @@
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
-// Be careful when using HashMap/HashSet, its iteration order is unspecified,
-// which might break coloring consistency.
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -18,11 +16,8 @@ use commit_verify::mpc::{self, MPC_MINIMAL_DEPTH};
 use commit_verify::CommitId as _;
 use commit_verify::TryCommitVerify;
 use ifaces::IssuerWrapper;
-use ifaces::Rgb20;
-use ifaces::SchemaIssuer;
 use rand::Rng;
 use rgbstd::containers::BundleDichotomy;
-use rgbstd::containers::ConsignmentExt;
 use rgbstd::containers::Fascia;
 use rgbstd::containers::PubWitness;
 use rgbstd::containers::Transfer;
@@ -41,32 +36,28 @@ use rgbstd::Amount;
 use rgbstd::BlindingFactor;
 use rgbstd::GenesisSeal;
 use rgbstd::Identity;
-use rgbstd::Operation;
 use rgbstd::Opout;
 use rgbstd::OutputSeal;
 use rgbstd::Precision;
-use rgbstd::StateType;
 use rgbstd::Transition;
 use rgbstd::TransitionBundle;
 use rgbstd::Vin;
 use rgbstd::XChain;
 use rgbstd::{
-    validation::ResolveWitness,
     containers::{AnchorSet, BuilderSeal, TransitionInfo},
     persistence::{IndexProvider, StashProvider, StateProvider, Stock},
     ContractId, GraphSeal, InputMap, OpId, XOutpoint, XOutputSeal,
 };
 use schemata::NonInflatableAsset;
-use strict_encoding::FieldName;
 use strict_types::encoding::TypeName;
-use strict_types::value::typify::TypedVal;
 
 use bp::{ConsensusDecode as _, Tx};
-use strict_types::StrictVal;
 
 use crate::ToRaw;
 
 
+// Be careful when using HashMap/HashSet, its iteration order is unspecified,
+// which might break coloring consistency.
 pub(crate) type RgbAssignments = BTreeMap<ContractId, BTreeMap<Beneficiary, u64>>;
 pub(crate) type Beneficiary = BuilderSeal<GraphSeal>;
 

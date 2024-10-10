@@ -19,7 +19,7 @@ use crate::types::{
     Beneficiary,
     ContractId,
 };
-use crate::resolver::LnResolver;
+use crate::resolvers::LnResolver;
 use crate::ToRaw;
 
 // TODO: figure out why rgb uses i64 for timestamp
@@ -129,7 +129,7 @@ fn test_rgb_workflow() {
     dbg!(&contract_id);
 
     let mut resolver = LnResolver::new();
-    resolver.add_tx(tx.clone(), 1, GENESIS_TIMESTAMP);
+    resolver.add_onchain_tx(&tx.consensus_serialize(), 1, GENESIS_TIMESTAMP);
 
     let mut stock = get_stock();
     stock.import_contract(contract.clone(), &resolver).unwrap();
@@ -164,7 +164,7 @@ fn test_rgb_workflow() {
     // dbg!(&tx);
     let spending_txid = tx.txid();
     dbg!(&spending_txid);
-    resolver.add_tx(tx, 2, GENESIS_TIMESTAMP + 1);
+    resolver.add_onchain_tx(&tx.consensus_serialize(), 2, GENESIS_TIMESTAMP + 1);
     stock.consume_fascia(fascia, &resolver).unwrap();
 
     let outputs = [
@@ -242,7 +242,7 @@ fn basic_transfer(
     let contract_id: ContractId  = contract.contract_id().into();
 
     let mut resolver = LnResolver::new();
-    resolver.add_tx(genesis_tx.clone(), 1, GENESIS_TIMESTAMP);
+    resolver.add_onchain_tx(&genesis_tx.consensus_serialize(), 1, GENESIS_TIMESTAMP);
 
     let mut stock = get_stock();
     stock.import_contract(contract.clone(), &resolver).unwrap();
@@ -269,7 +269,7 @@ fn basic_transfer(
 
     let fascia = partial_fascia.complete(&spending_tx.consensus_serialize());
 
-    resolver.add_tx(spending_tx, 2, GENESIS_TIMESTAMP + 1);
+    resolver.add_onchain_tx(&spending_tx.consensus_serialize(), 2, GENESIS_TIMESTAMP + 1);
     stock.consume_fascia(fascia.clone(), &resolver).unwrap();
 
     let outputs = [

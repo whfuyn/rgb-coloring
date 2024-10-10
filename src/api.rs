@@ -1,6 +1,6 @@
 use bp::dbc::Method;
 use rand::{Rng, SeedableRng};
-use rgbstd::containers::{Transfer, ValidContract};
+use rgbstd::containers::{Contract, Transfer, ValidContract};
 use rgbstd::persistence::{IndexProvider, StashProvider, StateProvider, Stock};
 use rgbstd::{Identity, OutputSeal, Precision};
 
@@ -129,4 +129,21 @@ pub fn rgb_transfer<S: StashProvider, H: StateProvider, P: IndexProvider>(
         .collect::<Vec<_>>();
 
     detail::rgb_transfer(stock, contract_id.to_raw(), &outputs)
+}
+
+pub fn get_empty_stock() -> Stock {
+    use schemata::NonInflatableAsset;
+    use ifaces::IssuerWrapper;
+
+    let mut stock = Stock::in_memory();
+    stock.import_kit(NonInflatableAsset::kit()).unwrap();
+
+    stock
+}
+
+pub fn rgb_export_contract<S: StashProvider, H: StateProvider, P: IndexProvider>(
+    stock: &Stock<S, H, P>,
+    contract_id: ContractId,
+) -> Contract {
+    stock.export_contract(contract_id.to_raw()).unwrap()
 }
