@@ -33,6 +33,19 @@ pub fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
     detail::rgb_balance(stock, contract_id.to_raw(), &utxos)
 }
 
+pub fn filter_rgb_outpoints<S: StashProvider, H: StateProvider, P: IndexProvider>(
+    stock: &Stock<S, H, P>,
+    utxos: &[Outpoint],
+) -> Vec<Outpoint> {
+    let utxos: Vec<RawOutpoint> =
+        utxos.iter().copied().map(ToRaw::to_raw).collect();
+
+    detail::filter_rgb_outpoints(stock, &utxos)
+        .into_iter()
+        .map(|o| Outpoint::from(o))
+        .collect()
+}
+
 pub fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
     available_utxos: &[Outpoint],
@@ -61,7 +74,33 @@ pub fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
     // TODO: or [u8; 32]?
     blinding_seed: u64,
 ) -> Vec<TransitionInfo> {
-    let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(blinding_seed);
+    let prev_outputs = prev_outputs
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    let mut rng = {
+        // TODO(fy): use a stable hash function, std hasher algorithm is not specified.
+        let blinding_seed = {
+            use std::hash::{DefaultHasher, Hash, Hasher};
+
+            #[derive(Debug, Hash, Clone)]
+            struct ColoringInfo {
+                prev_outputs: Vec<Outpoint>,
+                rgb_assignments: RgbAssignments,
+                change_seal: Option<Beneficiary>,
+            }
+
+            let mut hasher = DefaultHasher::new();
+            let coloring_info = ColoringInfo {
+                prev_outputs: prev_outputs.clone(),
+                rgb_assignments: rgb_assignments.clone(),
+                change_seal: change_seal.clone(),
+            };
+            coloring_info.hash(&mut hasher);
+            hasher.finish()
+        };
+        rand_chacha::ChaCha20Rng::seed_from_u64(blinding_seed)
+    };
 
     let prev_outputs = prev_outputs
         .into_iter()
@@ -70,7 +109,7 @@ pub fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
             XChain::Bitcoin(o)
         });
 
-    let rgb_assignments = rgb_assignments.to_raw_with_bliding_rng(&mut rng);
+    let rgb_assignments = rgb_assignments.to_raw_with_blinding_rng(&mut rng);
     let change_seal = change_seal.map(|s| s.to_raw_with_blinding(rng.gen()));
     
     let transition_info_list = detail::rgb_compose(

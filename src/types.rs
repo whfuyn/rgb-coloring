@@ -58,6 +58,12 @@ impl ToRaw for Txid {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct ContractId(pub(crate) RawContractId);
 
+impl ContractId {
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+}
+
 impl From<[u8; 32]> for ContractId {
     fn from(value: [u8; 32]) -> Self {
         Self(value.into())
@@ -67,6 +73,12 @@ impl From<[u8; 32]> for ContractId {
 impl Into<[u8; 32]> for ContractId {
     fn into(self) -> [u8; 32] {
         self.0.as_ref().to_byte_array()
+    }
+}
+
+impl std::fmt::Display for ContractId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -103,6 +115,15 @@ impl ToRaw for Outpoint {
     fn to_raw(self) -> Self::RawType {
         let outpoint = rgbstd::Outpoint::new(self.txid.to_raw(), self.vout);
         From::<XChain<rgbstd::Outpoint>>::from(XChain::with(rgbstd::Layer1::Bitcoin, outpoint))
+    }
+}
+
+impl From<RawOutpoint> for Outpoint {
+    fn from(o: RawOutpoint) -> Self {
+        let outpoint = o.as_reduced_unsafe();
+        let txid = outpoint.txid;
+        let vout = outpoint.vout.to_u32();
+        Self::new(txid, vout)
     }
 }
 
@@ -152,12 +173,20 @@ impl ToRaw for TransitionInfo {
 
 
 // Use BTreeMap to have a consistent order for generating blinding factors
-#[derive(Debug, Clone)]
+#[derive(Debug, Hash, Clone)]
 pub struct RgbAssignments(pub(crate) BTreeMap<ContractId, BTreeMap<Beneficiary, u64>>);
 
 impl RgbAssignments {
     pub fn new() -> Self {
         Self(Default::default())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn contracts(&self) -> impl Iterator<Item = &ContractId> {
+        self.0.keys()
     }
 
     pub fn add_recipient_for(
@@ -166,17 +195,19 @@ impl RgbAssignments {
         recipient: Beneficiary,
         amount: u64,
     ) {
-        let ent = self
-            .0
-            .entry(contract_id)
-            .or_default()
-            .entry(recipient)
-            .or_default();
+        if amount > 0 {
+            let ent = self
+                .0
+                .entry(contract_id)
+                .or_default()
+                .entry(recipient)
+                .or_default();
 
-        *ent = ent.checked_add(amount).expect("rgb amount overflow");
+            *ent = ent.checked_add(amount).expect("rgb amount overflow");
+        }
     }
 
-    pub(crate) fn to_raw_with_bliding_rng<R: Rng>(self, rng: &mut R) -> RawRgbAssignments {
+    pub(crate) fn to_raw_with_blinding_rng<R: Rng>(self, rng: &mut R) -> RawRgbAssignments {
         self.0
             .into_iter()
             .map(|(cid, assignments)| {

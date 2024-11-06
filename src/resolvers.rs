@@ -168,3 +168,21 @@ impl ResolveWitness for LocalResolver {
         return Err(WitnessResolverError::Unknown(witness_id));
     }
 }
+
+/// Unchecked fascia resolver
+pub struct FasciaResolver;
+
+impl ResolveWitness for FasciaResolver {
+    fn resolve_pub_witness(
+        &self,
+        _: XWitnessId,
+    ) -> Result<XWitnessTx, WitnessResolverError> {
+        unreachable!()
+    }
+    fn resolve_pub_witness_ord(
+        &self,
+        _witness_id: XWitnessId,
+    ) -> Result<WitnessOrd, WitnessResolverError> {
+        Ok(WitnessOrd::Tentative)
+    }
+}

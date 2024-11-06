@@ -159,7 +159,7 @@ fn test_rgb_workflow() {
     let (commitment, partial_fascia) = rgb_commit(&available_utxos, ti_list);
 
     let tx = build_rgb_tx(&available_utxos, 3, &commitment);
-    let fascia = partial_fascia.complete(&tx.consensus_serialize());
+    let fascia = partial_fascia.complete_with_tx(&tx.consensus_serialize());
 
     // dbg!(&tx);
     let spending_txid = tx.txid();
@@ -239,7 +239,7 @@ fn basic_transfer(
     is_testnet: bool,
 ) -> ([u8; 32], ValidTransfer) {
     let genesis_txid = genesis_tx.txid();
-    let contract_id: ContractId  = contract.contract_id().into();
+    let contract_id: ContractId = contract.contract_id().into();
 
     let mut resolver = LnResolver::new();
     resolver.add_onchain_tx(&genesis_tx.consensus_serialize(), 1, GENESIS_TIMESTAMP);
@@ -267,7 +267,7 @@ fn basic_transfer(
     let spending_tx = build_rgb_tx(&available_utxos, 3, &commitment);
     let spending_txid = spending_tx.txid();
 
-    let fascia = partial_fascia.complete(&spending_tx.consensus_serialize());
+    let fascia = partial_fascia.complete_with_tx(&spending_tx.consensus_serialize());
 
     resolver.add_onchain_tx(&spending_tx.consensus_serialize(), 2, GENESIS_TIMESTAMP + 1);
     stock.consume_fascia(fascia.clone(), &resolver).unwrap();
@@ -278,11 +278,9 @@ fn basic_transfer(
         // Outpoint::new(spending_txid, 2),
     ];
     let transfer = rgb_transfer(&stock, contract_id, &outputs);
-
     let valid_transfer = transfer.validate(&resolver, is_testnet).unwrap();
 
     let balance = rgb_balance(&stock, contract_id, &outputs);
-
     assert_eq!(balance, 20);
 
     {
@@ -291,6 +289,8 @@ fn basic_transfer(
             Outpoint::new(spending_txid, 1),
             // Outpoint::new(spending_txid, 2),
         ];
+        let transfer = rgb_transfer(&stock, contract_id, &outputs);
+        let valid_transfer = transfer.validate(&resolver, is_testnet).unwrap();
 
         let mut stock = get_stock();
         stock.accept_transfer(valid_transfer.clone(), resolver).unwrap();

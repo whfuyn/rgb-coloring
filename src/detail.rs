@@ -56,7 +56,7 @@ use bp::{ConsensusDecode as _, Tx};
 use crate::ToRaw;
 
 
-// Be careful when using HashMap/HashSet, its iteration order is unspecified,
+// Be careful when using HashMap/HashSet, its iteration order is undefined,
 // which might break coloring consistency.
 pub(crate) type RgbAssignments = BTreeMap<ContractId, BTreeMap<Beneficiary, u64>>;
 pub(crate) type Beneficiary = BuilderSeal<GraphSeal>;
@@ -77,7 +77,7 @@ pub(crate) fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
         .unwrap();
 
     let contract = stock
-        .contract_iface(contract_id, iface_name.clone())
+        .contract_iface(contract_id, iface_name)
         .unwrap();
     // .map_err(|e| e.to_string())?;
 
@@ -88,6 +88,42 @@ pub(crate) fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
         .sum::<Amount>();
 
     amount.into()
+}
+
+pub(crate) fn filter_rgb_outpoints<S: StashProvider, H: StateProvider, P: IndexProvider>(
+    stock: &Stock<S, H, P>,
+    utxos: &[XOutpoint],
+) -> HashSet<XOutpoint> {
+    let iface_name = TypeName::from("RGB20Fixed");
+    let iface = stock.iface(iface_name.clone()).unwrap();
+    let operation = iface.default_operation.as_ref().unwrap();
+
+    let assignment_name = iface
+        .transitions
+        .get(operation)
+        .and_then(|t| t.default_assignment.clone())
+        .unwrap();
+
+    let mut rgb_outpoints = vec![];
+    for contract_info in stock.contracts().unwrap() {
+        let contract_id = contract_info.id;
+
+        let contract = stock
+            .contract_iface(contract_id, iface_name.clone())
+            .unwrap();
+        // .map_err(|e| e.to_string())?;
+
+        rgb_outpoints.extend(
+            contract
+                .fungible(assignment_name.clone(), utxos)
+                .unwrap()
+                .map(|o| o.seal.to_outpoint())
+        );
+    }
+
+    rgb_outpoints
+        .into_iter()
+        .collect()
 }
 
 pub(crate) fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvider>(
@@ -304,9 +340,21 @@ pub struct PartialFascia {
 }
 
 impl PartialFascia {
-    pub fn complete(self, consensus_serialized_tx: &[u8]) -> Fascia {
+    #[must_use]
+    pub fn complete_with_tx(self, consensus_serialized_tx: &[u8]) -> Fascia {
         let tx = Tx::consensus_deserialize(consensus_serialized_tx).unwrap();
         let witness = PubWitness::with(tx);
+        Fascia {
+            witness: XChain::with(rgbstd::Layer1::Bitcoin, witness),
+            anchor: self.anchor_set,
+            bundles: self.bundles,
+        }
+    }
+
+    #[must_use]
+    pub fn complete_with_txid(self, txid: impl Into<crate::types::Txid>) -> Fascia {
+        let txid = txid.into().to_raw();
+        let witness = PubWitness::new(txid);
         Fascia {
             witness: XChain::with(rgbstd::Layer1::Bitcoin, witness),
             anchor: self.anchor_set,
