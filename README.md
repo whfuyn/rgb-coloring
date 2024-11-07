@@ -17,7 +17,7 @@ And it's still a work in progress.
 
 ## Usage
 
-### 1. Issue a new RGB20 token.
+### 1. Issue a new RGB20 token
 ```rust
 let is_testnet = true;
 
@@ -36,7 +36,7 @@ let contract = rgb_issue(
 );
 ```
 
-### 2. Transfer the token.
+### 2. Transfer the token
 ```rust
 // Sender's stock.
 let mut stock = get_stock();
@@ -68,8 +68,6 @@ let transition_list = rgb_compose(
     rgb_assignments,
     // Where to put the change.
     Some(Beneficiary::WitnessVout(2)),
-    // The seed for generating the blinding factor.
-    blinding_seed,
 );
 // The `commitment` is what we put in the OP_RETURN output.
 // The `partial_fascia` is the incomplete data that needs to be consumed by the stock.
@@ -89,7 +87,7 @@ let outputs = [
 let transfer = rgb_transfer(&stock, contract_id, &outputs);
 ```
 
-### 3. Accept the transfer.
+### 3. Accept the transfer
 ```rust
 // Recipient's stock.
 let mut stock = get_stock();

@@ -11,6 +11,8 @@ pub(crate) use rgbstd::{
     containers::TransitionInfo as RawTransitionInfo, ContractId as RawContractId, Txid as RawTxid,
     XChain, XOutpoint as RawOutpoint, 
 };
+use serde::Deserialize;
+use serde::Serialize;
 
 pub trait ToRaw {
     type RawType;
@@ -30,7 +32,7 @@ macro_rules! impl_from_raw {
 }
 
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Txid(pub(crate) RawTxid);
 
 impl From<[u8; 32]> for Txid {
@@ -55,7 +57,7 @@ impl ToRaw for Txid {
     }
 }
 
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct ContractId(pub(crate) RawContractId);
 
 impl ContractId {
@@ -93,7 +95,7 @@ impl ToRaw for ContractId {
 }
 
 
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Outpoint {
     pub txid: Txid,
     pub vout: u32,
@@ -128,7 +130,7 @@ impl From<RawOutpoint> for Outpoint {
 }
 
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Beneficiary {
     WitnessVout(u32),
     Outpoint(Outpoint),
@@ -173,7 +175,7 @@ impl ToRaw for TransitionInfo {
 
 
 // Use BTreeMap to have a consistent order for generating blinding factors
-#[derive(Debug, Hash, Clone)]
+#[derive(Debug, Hash, Clone, Serialize, Deserialize)]
 pub struct RgbAssignments(pub(crate) BTreeMap<ContractId, BTreeMap<Beneficiary, u64>>);
 
 impl RgbAssignments {

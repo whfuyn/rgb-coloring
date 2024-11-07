@@ -71,8 +71,6 @@ pub fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
     prev_outputs: impl IntoIterator<Item = Outpoint>,
     rgb_assignments: RgbAssignments,
     change_seal: Option<Beneficiary>,
-    // TODO: or [u8; 32]?
-    blinding_seed: u64,
 ) -> Vec<TransitionInfo> {
     let prev_outputs = prev_outputs
         .into_iter()

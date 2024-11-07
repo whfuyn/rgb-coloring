@@ -154,7 +154,7 @@ fn test_rgb_workflow() {
     }
 
     let coins = rgb_coin_select(&stock, &available_utxos, &rgb_assignments);
-    let ti_list = rgb_compose(&stock, dbg!(coins), rgb_assignments, Some(Beneficiary::WitnessVout(2)), 0);
+    let ti_list = rgb_compose(&stock, dbg!(coins), rgb_assignments, Some(Beneficiary::WitnessVout(2)));
     // let ti_list = rgb_compose(&stock, dbg!(coins), rgb_assignments, None);
     let (commitment, partial_fascia) = rgb_commit(&available_utxos, ti_list);
 
@@ -223,9 +223,9 @@ fn test_coloring_consistency() {
         "test", "TEST", "TestCoin", "For tests".into(), 8, allocations, is_testnet,
     );
 
-    for blinding_seed in 0..10 {
-        let (first_commitment, first_consignment) = basic_transfer(genesis_tx.clone(), contract.clone(), blinding_seed, is_testnet);
-        let (second_commitment, second_consignment) = basic_transfer(genesis_tx.clone(), contract.clone(), blinding_seed, is_testnet);
+    for _ in 0..10 {
+        let (first_commitment, first_consignment) = basic_transfer(genesis_tx.clone(), contract.clone(), is_testnet);
+        let (second_commitment, second_consignment) = basic_transfer(genesis_tx.clone(), contract.clone(), is_testnet);
 
         assert_eq!(first_commitment, second_commitment);
         assert_eq!(first_consignment.consignment_id(), second_consignment.consignment_id());
@@ -235,7 +235,6 @@ fn test_coloring_consistency() {
 fn basic_transfer(
     genesis_tx: Tx,
     contract: ValidContract,
-    blinding_seed: u64,
     is_testnet: bool,
 ) -> ([u8; 32], ValidTransfer) {
     let genesis_txid = genesis_tx.txid();
@@ -261,7 +260,7 @@ fn basic_transfer(
         Outpoint::new(genesis_txid, 0),
     ];
     let prev_outputs = rgb_coin_select(&stock, &available_utxos, &rgb_assignments);
-    let ti_list = rgb_compose(&stock, prev_outputs, rgb_assignments, Some(Beneficiary::WitnessVout(2)), blinding_seed);
+    let ti_list = rgb_compose(&stock, prev_outputs, rgb_assignments, Some(Beneficiary::WitnessVout(2)));
     let (commitment, partial_fascia) = rgb_commit(&available_utxos, ti_list);
 
     let spending_tx = build_rgb_tx(&available_utxos, 3, &commitment);

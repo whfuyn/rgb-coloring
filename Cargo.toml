@@ -17,8 +17,5 @@ commit_verify = "0.11.0-beta.8"
 
 rand = "0.8.5"
 rand_chacha = "0.3"
-# serde_yaml = "0.9.19"
 
-# move to dev dep
-tempfile = "3"
-
+serde = { version = "1.0.214", features = ["derive"] }

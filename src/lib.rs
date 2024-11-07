@@ -1,4 +1,5 @@
 // TODO:
+// - Refactor types and APIs
 // - Error handling
 // - Tests
 
