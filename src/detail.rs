@@ -230,7 +230,7 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider, 
             for (opout, state) in list {
                 main_builder = main_builder.add_input(opout, state.clone()).unwrap();
                 if opout.ty != assignment_id {
-                    // TODO: update bliding
+                    // TODO: update blinding
                     // let seal = output_for_assignment(contract_id, opout.ty)?;
                     // state.update_blinding(pedersen_blinder(contract_id, assignment_id));
 

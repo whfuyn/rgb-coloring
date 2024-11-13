@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 pub(crate) use crate::detail::{
     Beneficiary as RawBeneficiary, RgbAssignments as RawRgbAssignments,
@@ -81,6 +82,13 @@ impl Into<[u8; 32]> for ContractId {
 impl std::fmt::Display for ContractId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl FromStr for ContractId {
+    type Err = <RawContractId as FromStr>::Err;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(RawContractId::from_str(s)?.into())
     }
 }
 
