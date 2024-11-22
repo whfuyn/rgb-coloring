@@ -28,6 +28,7 @@ pub mod prelude {
     pub use rgbstd::{
         persistence::Stock,
         containers::Transfer,
+        containers::ValidTransfer,
     };
 }
 
