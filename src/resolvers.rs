@@ -10,6 +10,8 @@ use bp::{ConsensusDecode, ConsensusEncode, Tx};
 use bp::Txid;
 use std::collections::HashMap;
 
+
+// TODO: maybe remove this resolver.
 #[derive(Default, Debug)]
 pub struct LnResolver {
     // Local known on-chain txs.
@@ -166,6 +168,99 @@ impl ResolveWitness for LocalResolver {
         }
 
         return Err(WitnessResolverError::Unknown(witness_id));
+    }
+}
+
+
+#[derive(Debug)]
+pub struct OnlineResolver {
+    // TODO
+    #[allow(unused)]
+    esplora_url: String,
+    client: esplora_client::BlockingClient,
+}
+
+impl OnlineResolver {
+    pub fn new(esplora_url: &str) -> Self {
+        let builder = esplora_client::Builder::new(esplora_url);
+
+        Self {
+            esplora_url: esplora_url.to_string(),
+            client: builder.build_blocking(),
+        }
+    }
+}
+
+impl ResolveWitness for OnlineResolver {
+    fn resolve_pub_witness(
+        &self,
+        witness_id: XWitnessId,
+    ) -> Result<XWitnessTx, WitnessResolverError> {
+        let XWitnessId::Bitcoin(txid) = witness_id else {
+            return Err(WitnessResolverError::Other(
+                witness_id,
+                format!("{} is not supported as layer 1 network", witness_id.layer1()),
+            ));
+        };
+
+        let txid = txid
+            .to_string()
+            .parse()
+            .unwrap();
+        self
+            .client
+            .get_tx(&txid)
+            .map(|tx_opt| {
+                tx_opt.map(|tx| {
+                    use bitcoin::consensus::Encodable;
+
+                    let mut buf = Vec::new();
+                    tx.consensus_encode(&mut buf).unwrap();
+                    Tx::consensus_deserialize(&buf).unwrap()
+                })
+            })
+            .map_err(|e| WitnessResolverError::Other(witness_id, e.to_string()))
+            .and_then(|r| r.ok_or(WitnessResolverError::Unknown(witness_id)))
+            .map(XChain::Bitcoin)
+    }
+
+    fn resolve_pub_witness_ord(
+        &self,
+        witness_id: XWitnessId,
+    ) -> Result<WitnessOrd, WitnessResolverError> {
+        let XWitnessId::Bitcoin(txid) = witness_id else {
+            return Err(WitnessResolverError::Other(
+                witness_id,
+                format!("{} is not supported as layer 1 network", witness_id.layer1()),
+            ));
+        };
+        let txid = txid
+            .to_string()
+            .parse()
+            .unwrap();
+
+        let tx_opt = self
+            .client
+            .get_tx(&txid)
+            .map_err(|e| WitnessResolverError::Other(witness_id, e.to_string()))?;
+        if tx_opt.is_none() {
+            return Ok(WitnessOrd::Archived);
+        }
+
+        let status = self.client.get_tx_status(&txid)
+            .map_err(|e| WitnessResolverError::Other(witness_id, e.to_string()))?;
+        let ord = match status
+            .block_height
+            .and_then(|h| status.block_time.map(|t| (h, t)))
+        {
+            Some((h, t)) => {
+                let pos = WitnessPos::new(h, t as i64)
+                    .ok_or_else(|| WitnessResolverError::Other(witness_id, "Invalid server data".to_string()))?;
+                WitnessOrd::Mined(pos)
+            }
+            None => WitnessOrd::Tentative,
+        };
+        Ok(ord)
     }
 }
 

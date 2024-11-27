@@ -145,6 +145,7 @@ pub(crate) fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvid
     let mut selected_prev_outputs: Vec<XOutputSeal> = vec![];
     for (&contract_id, rgb_assignment) in &rgb_assignments.0 {
         let total_amount_needed: u64 = rgb_assignment.iter().map(|(_, amount)| *amount).sum();
+        let mut total_amount_collected = Amount::ZERO;
 
         let contract = stock
             .contract_iface(contract_id.to_raw(), iface_name.clone())
@@ -164,15 +165,14 @@ pub(crate) fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvid
                 .map(|(seal, vals)| (vals.iter().copied().sum::<Amount>(), seal, vals))
                 .collect();
             state.sort_by_key(|(sum, _, _)| *sum);
-            let mut sum = Amount::ZERO;
             state
                 .iter()
                 .rev()
                 .take_while(|(val, _, _)| {
-                    if sum >= total_amount_needed.into() {
+                    if total_amount_collected >= total_amount_needed.into() {
                         false
                     } else {
-                        sum += *val;
+                        total_amount_collected += *val;
                         true
                     }
                 })
