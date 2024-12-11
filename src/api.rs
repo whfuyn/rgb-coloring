@@ -2,7 +2,7 @@ use bp::dbc::Method;
 use rand::{Rng, SeedableRng};
 use rgbstd::containers::{Contract, Transfer, ValidContract};
 use rgbstd::persistence::{IndexProvider, StashProvider, StateProvider, Stock};
-use rgbstd::{Identity, OutputSeal, Precision};
+use rgbstd::OutputSeal;
 
 use crate::types::*;
 

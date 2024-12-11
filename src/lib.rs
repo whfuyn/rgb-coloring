@@ -9,7 +9,7 @@ mod types;
 mod resolvers;
 mod error;
 
-// #[cfg(test)]
+#[cfg(test)]
 mod tests;
 
 pub use rgbstd;

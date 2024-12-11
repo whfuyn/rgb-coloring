@@ -1,9 +1,7 @@
 use bp::{*, Tx as BpTx, Outpoint as BpOutpoint};
 use ifaces::IssuerWrapper;
 use rgbstd::persistence::Stock;
-use rgbstd::containers::{ConsignmentExt, Transfer, UniversalFile, ValidConsignment, ValidContract, ValidTransfer};
-use rgbstd::BlindingFactor;
-// use rgbstd::ContractId;
+use rgbstd::containers::{ConsignmentExt, ValidContract, ValidTransfer};
 
 use crate::api::{
     rgb_issue,

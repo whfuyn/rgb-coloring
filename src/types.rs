@@ -1,7 +1,6 @@
 // TODO: consider if it's a better option to wrap those types or we should just expose them
 
 use std::collections::BTreeMap;
-use std::collections::HashMap;
 use std::str::FromStr;
 
 pub(crate) use crate::detail::{

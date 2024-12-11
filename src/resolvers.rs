@@ -1,3 +1,6 @@
+use std::time::Duration;
+use std::collections::HashMap;
+
 use rgbstd::{
     containers::Consignment, validation::{
         ResolveWitness,
@@ -8,7 +11,11 @@ use rgbstd::{
 };
 use bp::{ConsensusDecode, ConsensusEncode, Tx};
 use bp::Txid;
-use std::collections::HashMap;
+
+use backon::{
+    BlockingRetryable,
+    ExponentialBuilder,
+};
 
 
 // TODO: maybe remove this resolver.
@@ -207,7 +214,8 @@ impl ResolveWitness for OnlineResolver {
             .to_string()
             .parse()
             .unwrap();
-        self
+
+        let op = || self
             .client
             .get_tx(&txid)
             .map(|tx_opt| {
@@ -221,7 +229,9 @@ impl ResolveWitness for OnlineResolver {
             })
             .map_err(|e| WitnessResolverError::Other(witness_id, e.to_string()))
             .and_then(|r| r.ok_or(WitnessResolverError::Unknown(witness_id)))
-            .map(XChain::Bitcoin)
+            .map(XChain::Bitcoin);
+
+        op.retry(default_backoff()).call()
     }
 
     fn resolve_pub_witness_ord(
@@ -239,28 +249,31 @@ impl ResolveWitness for OnlineResolver {
             .parse()
             .unwrap();
 
-        let tx_opt = self
-            .client
-            .get_tx(&txid)
-            .map_err(|e| WitnessResolverError::Other(witness_id, e.to_string()))?;
-        if tx_opt.is_none() {
-            return Ok(WitnessOrd::Archived);
-        }
-
-        let status = self.client.get_tx_status(&txid)
-            .map_err(|e| WitnessResolverError::Other(witness_id, e.to_string()))?;
-        let ord = match status
-            .block_height
-            .and_then(|h| status.block_time.map(|t| (h, t)))
-        {
-            Some((h, t)) => {
-                let pos = WitnessPos::new(h, t as i64)
-                    .ok_or_else(|| WitnessResolverError::Other(witness_id, "Invalid server data".to_string()))?;
-                WitnessOrd::Mined(pos)
+        let op = || {
+            let tx_opt = self
+                .client
+                .get_tx(&txid)
+                .map_err(|e| WitnessResolverError::Other(witness_id, e.to_string()))?;
+            if tx_opt.is_none() {
+                return Ok(WitnessOrd::Archived);
             }
-            None => WitnessOrd::Tentative,
+
+            let status = self.client.get_tx_status(&txid)
+                .map_err(|e| WitnessResolverError::Other(witness_id, e.to_string()))?;
+            let ord = match status
+                .block_height
+                .and_then(|h| status.block_time.map(|t| (h, t)))
+            {
+                Some((h, t)) => {
+                    let pos = WitnessPos::new(h, t as i64)
+                        .ok_or_else(|| WitnessResolverError::Other(witness_id, "Invalid server data".to_string()))?;
+                    WitnessOrd::Mined(pos)
+                }
+                None => WitnessOrd::Tentative,
+            };
+            Ok(ord)
         };
-        Ok(ord)
+        op.retry(default_backoff()).call()
     }
 }
 
@@ -280,4 +293,9 @@ impl ResolveWitness for FasciaResolver {
     ) -> Result<WitnessOrd, WitnessResolverError> {
         Ok(WitnessOrd::Tentative)
     }
+}
+
+
+fn default_backoff() -> ExponentialBuilder {
+    ExponentialBuilder::default()
 }
