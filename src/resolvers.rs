@@ -1,4 +1,3 @@
-use std::time::Duration;
 use std::collections::HashMap;
 
 use rgbstd::{
@@ -42,8 +41,9 @@ impl LnResolver {
         height: u32,
         timestamp: i64,
     ) {
+        let height = std::num::NonZeroU32::new(height).unwrap();
         let tx = Tx::consensus_deserialize(consensus_serialized_tx).unwrap();
-        let witness_pos = WitnessPos::new(height, timestamp).unwrap();
+        let witness_pos = WitnessPos::bitcoin(height, timestamp).unwrap();
         self.local_txs.insert(tx.txid(), (tx, witness_pos));
     }
 
@@ -265,7 +265,9 @@ impl ResolveWitness for OnlineResolver {
                 .and_then(|h| status.block_time.map(|t| (h, t)))
             {
                 Some((h, t)) => {
-                    let pos = WitnessPos::new(h, t as i64)
+                    
+                    let h = std::num::NonZeroU32::new(h).ok_or_else(|| WitnessResolverError::Other(witness_id, "Invalid block height".to_string()))?;
+                    let pos = WitnessPos::bitcoin(h, t as i64)
                         .ok_or_else(|| WitnessResolverError::Other(witness_id, "Invalid server data".to_string()))?;
                     WitnessOrd::Mined(pos)
                 }
@@ -287,6 +289,7 @@ impl ResolveWitness for FasciaResolver {
     ) -> Result<XWitnessTx, WitnessResolverError> {
         unreachable!()
     }
+
     fn resolve_pub_witness_ord(
         &self,
         _witness_id: XWitnessId,
