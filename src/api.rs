@@ -1,5 +1,6 @@
 use bp::dbc::Method;
 use rand::{Rng, SeedableRng};
+use rgbinvoice::{RgbInvoice, RgbInvoiceBuilder};
 use rgbstd::containers::{Contract, Transfer, ValidContract};
 use rgbstd::persistence::{IndexProvider, StashProvider, StateProvider, Stock};
 use rgbstd::OutputSeal;
@@ -150,6 +151,7 @@ pub fn rgb_transfer<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
     contract_id: ContractId,
     outputs: &[Outpoint],
+    secret_seal: Option<[u8; 32]>,
 ) -> Transfer {
     use rgbstd::OutputSeal;
     use bp::seals::txout::CloseMethod;
@@ -165,7 +167,8 @@ pub fn rgb_transfer<S: StashProvider, H: StateProvider, P: IndexProvider>(
         })
         .collect::<Vec<_>>();
 
-    detail::rgb_transfer(stock, contract_id.to_raw(), &outputs)
+    let secret_seal = secret_seal.map(|s| XChain::with(rgbstd::Layer1::Bitcoin, SecretSeal::from(s)));
+    detail::rgb_transfer(stock, contract_id.to_raw(), &outputs, secret_seal)
 }
 
 pub fn get_empty_stock() -> Stock {
@@ -183,4 +186,53 @@ pub fn rgb_export_contract<S: StashProvider, H: StateProvider, P: IndexProvider>
     contract_id: ContractId,
 ) -> Contract {
     stock.export_contract(contract_id.to_raw()).unwrap()
+}
+
+pub fn rgb_build_invoice<'a, S: StashProvider, H: StateProvider, P: IndexProvider>(
+    stock: &mut Stock<S, H, P>,
+    contract_id: ContractId,
+    amount: u64,
+    beneficiary: Beneficiary,
+    transports: impl IntoIterator<Item = &'a str>,
+    expiry_secs: Option<u32>,
+    chain_net: rgbinvoice::ChainNet,
+) -> RgbInvoice {
+    use rgbstd::GraphSeal;
+    use bp::seals::txout::CloseMethod;
+    use commit_verify::Conceal;
+
+    let beneficiary = {
+        let b = match beneficiary {
+            Beneficiary::WitnessVout(vout) => {
+                let seal = GraphSeal::new_random_vout(CloseMethod::OpretFirst, vout);
+                stock.store_secret_seal(XChain::Bitcoin(seal)).unwrap();
+                // TODO: check
+                rgbinvoice::Beneficiary::BlindedSeal(seal.conceal())
+            }
+            Beneficiary::Outpoint(outpoint) => {
+                let seal = GraphSeal::new_random(CloseMethod::OpretFirst, outpoint.txid.0, outpoint.vout);
+                stock.store_secret_seal(XChain::Bitcoin(seal)).unwrap();
+                rgbinvoice::Beneficiary::BlindedSeal(seal.conceal())
+            }
+            Beneficiary::SecretSeal(secret_seal) => {
+                // TODO: check
+                rgbinvoice::Beneficiary::BlindedSeal(SecretSeal::from(secret_seal))
+            }
+        };
+        rgbinvoice::XChainNet::with(chain_net, b)
+    };
+
+    let expiry = {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        (timestamp + expiry_secs.unwrap_or(600) as u64) as i64
+    };
+    RgbInvoiceBuilder::rgb20(contract_id.to_raw(), beneficiary)
+        .set_expiry_timestamp(expiry)
+        .set_amount_raw(amount)
+        .add_transports(transports)
+        .unwrap()
+        .finish()
 }

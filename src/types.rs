@@ -10,7 +10,11 @@ use rand::Rng;
 pub(crate) use rgbstd::{
     containers::TransitionInfo as RawTransitionInfo, ContractId as RawContractId, Txid as RawTxid,
     XChain, XOutpoint as RawOutpoint, 
+    SecretSeal,
 };
+use bp::seals::txout::CloseMethod;
+use rgbstd::GraphSeal;
+
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -141,6 +145,7 @@ impl From<RawOutpoint> for Outpoint {
 pub enum Beneficiary {
     WitnessVout(u32),
     Outpoint(Outpoint),
+    SecretSeal([u8; 32]),
 }
 
 impl Beneficiary {
@@ -148,23 +153,34 @@ impl Beneficiary {
         Self::WitnessVout(vout)
     }
 
-    pub fn new_outpoint(outpoint: Outpoint) -> Self {
+    pub fn new_outpoint(txid: impl Into<Txid>, vout: u32) -> Self {
+        let outpoint = Outpoint::new(txid, vout);
         Self::Outpoint(outpoint)
     }
 
-    pub(crate) fn to_raw_with_blinding(self, blinding: u64) -> RawBeneficiary {
-        use bp::seals::txout::CloseMethod;
-        use rgbstd::GraphSeal;
+    pub fn new_secret_seal(secret_seal: [u8; 32]) -> Self {
+        Self::SecretSeal(secret_seal)
+    }
 
+    pub(crate) fn to_raw_with_blinding(self, blinding: u64) -> RawBeneficiary {
+        let revealed_seal = |seal| -> RawBeneficiary {
+            From::<XChain<GraphSeal>>::from(XChain::with(rgbstd::Layer1::Bitcoin, seal))
+        };
         let close_method = CloseMethod::OpretFirst;
-        let seal: GraphSeal = match self {
-            Self::WitnessVout(vout) => GraphSeal::with_blinded_vout(close_method, vout, blinding),
+        let raw_beneficiary: RawBeneficiary = match self {
+            Self::WitnessVout(vout) => {
+                revealed_seal(GraphSeal::with_blinded_vout(close_method, vout, blinding))
+            }
             Self::Outpoint(outpoint) => {
-                GraphSeal::with_blinding(close_method, outpoint.txid.0, outpoint.vout, blinding)
+                revealed_seal(GraphSeal::with_blinding(close_method, outpoint.txid.0, outpoint.vout, blinding))
+            }
+            Self::SecretSeal(secret_seal) => {
+                let secret_seal = XChain::with(rgbstd::Layer1::Bitcoin, SecretSeal::from(secret_seal));
+                RawBeneficiary::Concealed(secret_seal)
             }
         };
 
-        From::<XChain<GraphSeal>>::from(XChain::with(rgbstd::Layer1::Bitcoin, seal))
+        raw_beneficiary
     }
 }
 

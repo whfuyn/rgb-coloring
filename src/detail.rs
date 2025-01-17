@@ -39,6 +39,7 @@ use rgbstd::Identity;
 use rgbstd::Opout;
 use rgbstd::OutputSeal;
 use rgbstd::Precision;
+use rgbstd::SecretSeal;
 use rgbstd::Transition;
 use rgbstd::TransitionBundle;
 use rgbstd::Vin;
@@ -548,10 +549,10 @@ pub(crate) fn rgb_transfer<S: StashProvider, H: StateProvider, P: IndexProvider>
     stock: &Stock<S, H, P>,
     contract_id: ContractId,
     outputs: &[XOutputSeal],
+    secret_seal: Option<XChain<SecretSeal>>,
 ) -> Transfer {
-    stock.transfer(contract_id, outputs, None).unwrap()
+    stock.transfer(contract_id, outputs, secret_seal).unwrap()
 }
-
 
 #[inline]
 fn get_blinding_factor<R: Rng>(rng: &mut R) -> BlindingFactor {

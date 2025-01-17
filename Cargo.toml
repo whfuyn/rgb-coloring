@@ -7,8 +7,7 @@ edition = "2021"
 rgb-std = { version = "=0.11.0-beta.9.1", features = ["fs"]}
 rgb-schemata = "=0.11.0-beta.9"
 rgb-interfaces = "=0.11.0-beta.9"
-esplora-client = { version = "0.10.0", features = ["blocking-https-rustls"] }
-bitcoin = "0.32.2"
+rgb-invoice = "=0.11.0-beta.9.1"
 
 strict_types = { version = "2.7.0", features = ["serde"] }
 strict_encoding = "2.7.0"
@@ -16,6 +15,9 @@ amplify = "4.7.0"
 bp-core = "=0.11.0-beta.9"
 bp-std = "=0.11.0-beta.9"
 commit_verify = "=0.11.0-beta.9"
+
+esplora-client = { version = "0.10.0", features = ["blocking-https-rustls"] }
+bitcoin = "0.32.2"
 
 rand = "0.8.5"
 rand_chacha = "0.3"

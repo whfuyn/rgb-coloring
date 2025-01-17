@@ -172,7 +172,7 @@ fn test_rgb_workflow() {
         // Outpoint::new(txid, 1),
         // Outpoint::new(txid, 2),
     ];
-    let consign = rgb_transfer(&stock, contract_id, &outputs);
+    let consign = rgb_transfer(&stock, contract_id, &outputs, None);
     dbg!(&consign.consignment_id());
     // dbg!(&consign);
 
@@ -274,7 +274,7 @@ fn basic_transfer(
         // Outpoint::new(spending_txid, 1),
         // Outpoint::new(spending_txid, 2),
     ];
-    let transfer = rgb_transfer(&stock, contract_id, &outputs);
+    let transfer = rgb_transfer(&stock, contract_id, &outputs, None);
     let valid_transfer = transfer.validate(&resolver, is_testnet).unwrap();
 
     let balance = rgb_balance(&stock, contract_id, &outputs);
@@ -286,7 +286,7 @@ fn basic_transfer(
             Outpoint::new(spending_txid, 1),
             // Outpoint::new(spending_txid, 2),
         ];
-        let transfer = rgb_transfer(&stock, contract_id, &outputs);
+        let transfer = rgb_transfer(&stock, contract_id, &outputs, None);
         let valid_transfer = transfer.validate(&resolver, is_testnet).unwrap();
 
         let mut stock = get_stock();
