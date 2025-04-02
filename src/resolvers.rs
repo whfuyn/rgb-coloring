@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 
 use rgbstd::{
-    containers::Consignment, validation::{
+    containers::Consignment,
+    validation::{
         ResolveWitness,
         WitnessResolverError,
-    }, vm::{
+    },
+    vm::{
         WitnessOrd, WitnessPos, XWitnessTx
-    }, XChain, XWitnessId
+    },
+    XChain, XWitnessId
 };
 use bp::{ConsensusDecode, ConsensusEncode, Tx};
 use bp::Txid;
@@ -178,6 +181,44 @@ impl ResolveWitness for LocalResolver {
     }
 }
 
+
+#[derive(Debug)]
+pub enum GlobalResolver {
+    Online(OnlineResolver),
+    Local(LocalResolver),
+}
+
+impl GlobalResolver {
+    pub fn new_online(esplora_url: &str) -> Self {
+        Self::Online(OnlineResolver::new(esplora_url))
+    }
+
+    pub fn new_local(local_resolver: LocalResolver) -> Self {
+        Self::Local(local_resolver)
+    }
+}
+
+impl ResolveWitness for GlobalResolver {
+    fn resolve_pub_witness(
+        &self,
+        witness_id: XWitnessId,
+    ) -> Result<XWitnessTx, WitnessResolverError> {
+        match self {
+            Self::Online(resolver) => resolver.resolve_pub_witness(witness_id),
+            Self::Local(resolver) => resolver.resolve_pub_witness(witness_id),
+        }
+    }
+
+    fn resolve_pub_witness_ord(
+        &self,
+        witness_id: XWitnessId,
+    ) -> Result<WitnessOrd, WitnessResolverError> {
+        match self {
+            Self::Online(resolver) => resolver.resolve_pub_witness_ord(witness_id),
+            Self::Local(resolver) => resolver.resolve_pub_witness_ord(witness_id),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct OnlineResolver {

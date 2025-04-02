@@ -24,12 +24,16 @@ pub mod prelude {
     };
 
     pub use crate::api::*;
-    pub use crate::resolvers::{LnResolver, LocalResolver, FasciaResolver, OnlineResolver};
+    pub use crate::resolvers::{LnResolver, FasciaResolver, LocalResolver, OnlineResolver, GlobalResolver};
     pub use strict_encoding::{StrictDeserialize, StrictSerialize};
     pub use rgbstd::{
         persistence::Stock,
         containers::Transfer,
         containers::ValidTransfer,
+        validation::{
+            ResolveWitness,
+            WitnessResolverError,
+        },
     };
 }
 
