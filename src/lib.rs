@@ -14,6 +14,7 @@ mod tests;
 
 pub use rgbstd;
 pub use rgbinvoice;
+pub use bp;
 pub use amplify;
 pub use strict_types;
 pub use strict_encoding;
@@ -30,6 +31,7 @@ pub mod prelude {
         persistence::Stock,
         containers::Transfer,
         containers::ValidTransfer,
+        ChainNet,
         validation::{
             ResolveWitness,
             WitnessResolverError,

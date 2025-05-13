@@ -1,15 +1,14 @@
 use std::collections::HashMap;
 
 use rgbstd::{
-    containers::Consignment,
+    containers::{Consignment, PubWitness},
     validation::{
         ResolveWitness,
         WitnessResolverError,
     },
     vm::{
-        WitnessOrd, WitnessPos, XWitnessTx
+        WitnessOrd, WitnessPos,
     },
-    XChain, XWitnessId
 };
 use bp::{ConsensusDecode, ConsensusEncode, Tx};
 use bp::Txid;
@@ -71,22 +70,20 @@ impl LnResolver {
 impl ResolveWitness for LnResolver {
     fn resolve_pub_witness(
         &self,
-        witness_id: rgbstd::XWitnessId,
-    ) -> Result<rgbstd::vm::XWitnessTx, WitnessResolverError> {
-        let txid = witness_id.as_reduced_unsafe();
-
-        if let Some((tx, _)) = self.local_txs.get(txid) {
-            return Ok(XChain::Bitcoin(tx.clone()));
+        witness_id: rgbstd::Txid,
+    ) -> Result<bp::Tx, WitnessResolverError> {
+        if let Some((tx, _)) = self.local_txs.get(&witness_id) {
+            return Ok(tx.clone());
         }
 
         if let Some(ref tx) = self.active_tx {
-            if &tx.txid() == txid {
-                return Ok(XChain::Bitcoin(tx.clone()));
+            if tx.txid() == witness_id {
+                return Ok(tx.clone());
             }
         }
 
-        if let Some(tx) = self.archived_txs.get(txid) {
-            return Ok(XChain::Bitcoin(tx.clone()));
+        if let Some(tx) = self.archived_txs.get(&witness_id) {
+            return Ok(tx.clone());
         }
 
         return Err(WitnessResolverError::Unknown(witness_id));
@@ -94,27 +91,30 @@ impl ResolveWitness for LnResolver {
 
     fn resolve_pub_witness_ord(
         &self,
-        witness_id: rgbstd::XWitnessId,
+        witness_id: Txid,
     ) -> Result<WitnessOrd, WitnessResolverError> {
-        let txid = witness_id.as_reduced_unsafe();
-
-        if let Some((_, witness_pos)) = self.local_txs.get(txid) {
+        if let Some((_, witness_pos)) = self.local_txs.get(&witness_id) {
             return Ok(WitnessOrd::Mined(*witness_pos));
         }
 
         if let Some(ref tx) = self.active_tx {
-            if &tx.txid() == txid {
+            if tx.txid() == witness_id {
                 return Ok(WitnessOrd::Tentative)
             }
         }
 
-        if self.archived_txs.contains_key(txid) {
+        if self.archived_txs.contains_key(&witness_id) {
             return Ok(WitnessOrd::Archived)
         }
 
         return Err(WitnessResolverError::Unknown(witness_id));
     }
 
+    fn check_chain_net(&self, chain_net: rgbstd::ChainNet) -> Result<(), WitnessResolverError> {
+        // TODO
+        let _ = chain_net;
+        Ok(())
+    }
 }
 
 
@@ -133,12 +133,12 @@ impl LocalResolver {
             consignment
                 .bundles
                 .iter()
-                .filter_map(|bw| bw.pub_witness.maybe_map_ref(|w| w.tx().cloned()))
-                .filter_map(|tx| match tx {
-                    XChain::Bitcoin(tx) => Some(tx),
-                    XChain::Liquid(_) | XChain::Other(_) => None,
+                .filter_map(|bw| {
+                    match bw.pub_witness.clone() {
+                        PubWitness::Tx(tx) => Some((tx.txid(), tx)),
+                        _ => None,
+                    }
                 })
-                .map(|tx| (tx.txid(), tx)),
         );
     }
 }
@@ -146,17 +146,10 @@ impl LocalResolver {
 impl ResolveWitness for LocalResolver {
     fn resolve_pub_witness(
         &self,
-        witness_id: XWitnessId,
-    ) -> Result<XWitnessTx, WitnessResolverError> {
-        let XWitnessId::Bitcoin(txid) = witness_id else {
-            return Err(WitnessResolverError::Other(
-                witness_id,
-                format!("{} is not supported as layer 1 network", witness_id.layer1()),
-            ));
-        };
-
-        if let Some(tx) = self.terminal_txes.get(&txid) {
-            return Ok(XWitnessTx::Bitcoin(tx.clone()));
+        witness_id: Txid,
+    ) -> Result<Tx, WitnessResolverError> {
+        if let Some(tx) = self.terminal_txes.get(&witness_id) {
+            return Ok(tx.clone());
         }
 
         return Err(WitnessResolverError::Unknown(witness_id));
@@ -164,20 +157,18 @@ impl ResolveWitness for LocalResolver {
 
     fn resolve_pub_witness_ord(
         &self,
-        witness_id: XWitnessId,
+        witness_id: Txid,
     ) -> Result<WitnessOrd, WitnessResolverError> {
-        let XWitnessId::Bitcoin(txid) = witness_id else {
-            return Err(WitnessResolverError::Other(
-                witness_id,
-                format!("{} is not supported as layer 1 network", witness_id.layer1()),
-            ));
-        };
-
-        if self.terminal_txes.contains_key(&txid) {
+        if self.terminal_txes.contains_key(&witness_id) {
             return Ok(WitnessOrd::Tentative);
         }
 
         return Err(WitnessResolverError::Unknown(witness_id));
+    }
+
+    fn check_chain_net(&self, chain_net: rgbstd::ChainNet) -> Result<(), WitnessResolverError> {
+        let _ = chain_net;
+        Ok(())
     }
 }
 
@@ -201,8 +192,8 @@ impl GlobalResolver {
 impl ResolveWitness for GlobalResolver {
     fn resolve_pub_witness(
         &self,
-        witness_id: XWitnessId,
-    ) -> Result<XWitnessTx, WitnessResolverError> {
+        witness_id: Txid,
+    ) -> Result<Tx, WitnessResolverError> {
         match self {
             Self::Online(resolver) => resolver.resolve_pub_witness(witness_id),
             Self::Local(resolver) => resolver.resolve_pub_witness(witness_id),
@@ -211,11 +202,18 @@ impl ResolveWitness for GlobalResolver {
 
     fn resolve_pub_witness_ord(
         &self,
-        witness_id: XWitnessId,
+        witness_id: Txid,
     ) -> Result<WitnessOrd, WitnessResolverError> {
         match self {
             Self::Online(resolver) => resolver.resolve_pub_witness_ord(witness_id),
             Self::Local(resolver) => resolver.resolve_pub_witness_ord(witness_id),
+        }
+    }
+
+    fn check_chain_net(&self, chain_net: rgbstd::ChainNet) -> Result<(), WitnessResolverError> {
+        match self {
+            Self::Online(resolver) => resolver.check_chain_net(chain_net),
+            Self::Local(resolver) => resolver.check_chain_net(chain_net),
         }
     }
 }
@@ -242,16 +240,9 @@ impl OnlineResolver {
 impl ResolveWitness for OnlineResolver {
     fn resolve_pub_witness(
         &self,
-        witness_id: XWitnessId,
-    ) -> Result<XWitnessTx, WitnessResolverError> {
-        let XWitnessId::Bitcoin(txid) = witness_id else {
-            return Err(WitnessResolverError::Other(
-                witness_id,
-                format!("{} is not supported as layer 1 network", witness_id.layer1()),
-            ));
-        };
-
-        let txid = txid
+        witness_id: Txid,
+    ) -> Result<Tx, WitnessResolverError> {
+        let txid = witness_id
             .to_string()
             .parse()
             .unwrap();
@@ -269,23 +260,16 @@ impl ResolveWitness for OnlineResolver {
                 })
             })
             .map_err(|e| WitnessResolverError::Other(witness_id, e.to_string()))
-            .and_then(|r| r.ok_or(WitnessResolverError::Unknown(witness_id)))
-            .map(XChain::Bitcoin);
+            .and_then(|r| r.ok_or(WitnessResolverError::Unknown(witness_id)));
 
         op.retry(default_backoff()).call()
     }
 
     fn resolve_pub_witness_ord(
         &self,
-        witness_id: XWitnessId,
+        witness_id: Txid,
     ) -> Result<WitnessOrd, WitnessResolverError> {
-        let XWitnessId::Bitcoin(txid) = witness_id else {
-            return Err(WitnessResolverError::Other(
-                witness_id,
-                format!("{} is not supported as layer 1 network", witness_id.layer1()),
-            ));
-        };
-        let txid = txid
+        let txid = witness_id
             .to_string()
             .parse()
             .unwrap();
@@ -318,6 +302,12 @@ impl ResolveWitness for OnlineResolver {
         };
         op.retry(default_backoff()).call()
     }
+
+    fn check_chain_net(&self, chain_net: rgbstd::ChainNet) -> Result<(), WitnessResolverError> {
+        // TODO
+        let _ = chain_net;
+        Ok(())
+    }
 }
 
 /// Unchecked fascia resolver
@@ -326,16 +316,20 @@ pub struct FasciaResolver;
 impl ResolveWitness for FasciaResolver {
     fn resolve_pub_witness(
         &self,
-        _: XWitnessId,
-    ) -> Result<XWitnessTx, WitnessResolverError> {
+        _: Txid,
+    ) -> Result<Tx, WitnessResolverError> {
         unreachable!()
     }
 
     fn resolve_pub_witness_ord(
         &self,
-        _witness_id: XWitnessId,
+        _witness_id: Txid,
     ) -> Result<WitnessOrd, WitnessResolverError> {
         Ok(WitnessOrd::Tentative)
+    }
+
+    fn check_chain_net(&self, _chain_net: rgbstd::ChainNet) -> Result<(), WitnessResolverError> {
+        unreachable!()
     }
 }
 

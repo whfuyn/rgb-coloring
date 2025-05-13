@@ -16,12 +16,9 @@ use commit_verify::mpc::{self, MPC_MINIMAL_DEPTH};
 use commit_verify::CommitId as _;
 use commit_verify::TryCommitVerify;
 use ifaces::IssuerWrapper;
-use rand::Rng;
-use rgbstd::containers::BundleDichotomy;
 use rgbstd::containers::Fascia;
 use rgbstd::containers::PubWitness;
 use rgbstd::containers::Transfer;
-use rgbstd::containers::TransitionInfoError;
 use rgbstd::containers::ValidContract;
 use rgbstd::interface::BuilderError;
 use rgbstd::interface::ContractBuilder;
@@ -33,7 +30,7 @@ use rgbstd::stl::AssetSpec;
 use rgbstd::stl::ContractTerms;
 use rgbstd::stl::RicardianContract;
 use rgbstd::Amount;
-use rgbstd::BlindingFactor;
+use rgbstd::ChainNet;
 use rgbstd::GenesisSeal;
 use rgbstd::Identity;
 use rgbstd::Opout;
@@ -43,11 +40,11 @@ use rgbstd::SecretSeal;
 use rgbstd::Transition;
 use rgbstd::TransitionBundle;
 use rgbstd::Vin;
-use rgbstd::XChain;
 use rgbstd::{
+    Txid,
     containers::{AnchorSet, BuilderSeal, TransitionInfo},
     persistence::{IndexProvider, StashProvider, StateProvider, Stock},
-    ContractId, GraphSeal, InputMap, OpId, XOutpoint, XOutputSeal,
+    ContractId, GraphSeal, InputMap, OpId, Outpoint,
 };
 use schemata::NonInflatableAsset;
 use strict_types::encoding::TypeName;
@@ -65,7 +62,7 @@ pub(crate) type Beneficiary = BuilderSeal<GraphSeal>;
 pub(crate) fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
     contract_id: ContractId,
-    utxos: &[XOutpoint],
+    utxos: &[Outpoint],
 ) -> u64 {
     let iface_name = TypeName::from("RGB20Fixed");
     let iface = stock.iface(iface_name.clone()).unwrap();
@@ -83,9 +80,9 @@ pub(crate) fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
     // .map_err(|e| e.to_string())?;
 
     let amount = contract
-        .fungible(assignment_name, utxos)
+        .fungible(assignment_name, dbg!(utxos))
         .unwrap()
-        .map(|a| a.state)
+        .map(|a| dbg!(a.state))
         .sum::<Amount>();
 
     amount.into()
@@ -93,8 +90,8 @@ pub(crate) fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
 
 pub(crate) fn filter_rgb_outpoints<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
-    utxos: &[XOutpoint],
-) -> HashSet<XOutpoint> {
+    utxos: &[Outpoint],
+) -> HashSet<Outpoint> {
     let iface_name = TypeName::from("RGB20Fixed");
     let iface = stock.iface(iface_name.clone()).unwrap();
     let operation = iface.default_operation.as_ref().unwrap();
@@ -129,9 +126,9 @@ pub(crate) fn filter_rgb_outpoints<S: StashProvider, H: StateProvider, P: IndexP
 
 pub(crate) fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
-    available_utxos: &[XOutpoint],
+    available_utxos: &[Outpoint],
     rgb_assignments: &crate::types::RgbAssignments,
-) -> Vec<XOutputSeal> {
+) -> Vec<OutputSeal> {
     // Only support RGB20Fixed for now.
     let iface_name = TypeName::from("RGB20Fixed");
     let iface = stock.iface(iface_name.clone()).unwrap();
@@ -143,7 +140,7 @@ pub(crate) fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvid
         .and_then(|t| t.default_assignment.clone())
         .unwrap();
 
-    let mut selected_prev_outputs: Vec<XOutputSeal> = vec![];
+    let mut selected_prev_outputs: Vec<OutputSeal> = vec![];
     for (&contract_id, rgb_assignment) in &rgb_assignments.0 {
         let total_amount_needed: u64 = rgb_assignment.iter().map(|(_, amount)| *amount).sum();
         let mut total_amount_collected = Amount::ZERO;
@@ -178,7 +175,7 @@ pub(crate) fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvid
                     }
                 })
                 .map(|(_, seal, _)| *seal)
-                .collect::<BTreeSet<XOutputSeal>>()
+                .collect::<BTreeSet<OutputSeal>>()
         };
 
         selected_prev_outputs.extend(prev_outputs);
@@ -190,17 +187,16 @@ pub(crate) fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvid
     selected_prev_outputs
 }
 
-pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider, R: Rng>(
+pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
-    prev_outputs: impl IntoIterator<Item = impl Into<XOutputSeal>>,
+    prev_outputs: impl IntoIterator<Item = impl Into<OutputSeal>>,
     rgb_assignments: BTreeMap<ContractId, BTreeMap<Beneficiary, u64>>,
     change_seal: Option<Beneficiary>,
-    rng: &mut R,
 ) -> Result<Vec<TransitionInfo>, StockError<S, H, P, ComposeError>> {
     let prev_outputs = prev_outputs
         .into_iter()
         .map(|o| o.into())
-        .collect::<HashSet<XOutputSeal>>();
+        .collect::<HashSet<OutputSeal>>();
 
     // Only support RGB20Fixed for now.
     let iface_name = TypeName::from("RGB20Fixed");
@@ -222,7 +218,7 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider, 
             .assignments_type(assignment_name)
             .ok_or(BuilderError::InvalidStateField(assignment_name.clone()))?;
 
-        let mut main_inputs = Vec::<XOutputSeal>::new();
+        let mut main_inputs = Vec::<OutputSeal>::new();
         let mut sum_inputs = Amount::ZERO;
         for (output, list) in
             stock.contract_assignments_for(contract_id, prev_outputs.iter().copied())?
@@ -240,7 +236,7 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider, 
                     main_builder = main_builder
                         .add_owned_state_raw(opout.ty, change_seal.expect("no change seal"), state)
                         .unwrap();
-                } else if let PersistedState::Amount(value, _, _) = state {
+                } else if let PersistedState::Amount(value) = state {
                     sum_inputs += value;
                 } else if let PersistedState::Data(_value, _) = state {
                     todo!()
@@ -255,25 +251,23 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider, 
 
         for (beneficiary, amount) in rgb_assignment {
             // let blinding_beneficiary = pedersen_blinder(contract_id, assignment_id);
-            let blinding_beneficiary = get_blinding_factor(rng);
+            // let blinding_beneficiary = get_blinding_factor(rng);
 
             main_builder = main_builder.add_fungible_state_raw(
                 assignment_id,
                 beneficiary,
                 amount,
-                blinding_beneficiary,
             )?;
         }
 
         let change_amount = sum_inputs - amount_needed.into();
         if change_amount > Amount::ZERO {
             // let blinding_change = BlindingFactor::random();
-            let blinding_change = get_blinding_factor(rng);
+            // let blinding_change = get_blinding_factor(rng);
             main_builder = main_builder.add_fungible_state_raw(
                 assignment_id,
                 change_seal.expect("no change seal for change amount"),
                 change_amount,
-                blinding_change,
             )?;
         }
 
@@ -285,7 +279,7 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider, 
     }
 
     let mut spent_state =
-        HashMap::<ContractId, HashMap<XOutputSeal, HashMap<Opout, PersistedState>>>::new();
+        HashMap::<ContractId, HashMap<OutputSeal, HashMap<Opout, PersistedState>>>::new();
     for id in stock.contracts_assigning(prev_outputs.iter().copied())? {
         // Skip handled contracts
         if handled_contract_ids.contains(&id) {
@@ -317,8 +311,8 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider, 
             continue;
         }
         let transition = blank_builder_opret.complete_transition()?;
-        let info = TransitionInfo::new(transition, outputs_opret).map_err(|e| {
-            debug_assert!(!matches!(e, TransitionInfoError::CloseMethodDivergence(_)));
+        let info = TransitionInfo::new(transition, outputs_opret).map_err(|_| {
+            // debug_assert!(!matches!(e, TransitionInfoError::CloseMethodDivergence(_)));
             ComposeError::TooManyInputs
         })?;
         transition_info_list.push(info);
@@ -337,7 +331,7 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider, 
 #[derive(Debug)]
 pub struct PartialFascia {
     anchor_set: AnchorSet,
-    bundles: NonEmptyOrdMap<ContractId, BundleDichotomy, U24>,
+    bundles: NonEmptyOrdMap<ContractId, TransitionBundle, U24>,
 }
 
 impl PartialFascia {
@@ -346,7 +340,7 @@ impl PartialFascia {
         let tx = Tx::consensus_deserialize(consensus_serialized_tx).unwrap();
         let witness = PubWitness::with(tx);
         Fascia {
-            witness: XChain::with(rgbstd::Layer1::Bitcoin, witness),
+            witness,
             anchor: self.anchor_set,
             bundles: self.bundles,
         }
@@ -354,10 +348,10 @@ impl PartialFascia {
 
     #[must_use]
     pub fn complete_with_txid(self, txid: impl Into<crate::types::Txid>) -> Fascia {
-        let txid = txid.into().to_raw();
+        let txid = txid.into();
         let witness = PubWitness::new(txid);
         Fascia {
-            witness: XChain::with(rgbstd::Layer1::Bitcoin, witness),
+            witness,
             anchor: self.anchor_set,
             bundles: self.bundles,
         }
@@ -365,7 +359,7 @@ impl PartialFascia {
 }
 
 pub(crate) fn rgb_commit(
-    finalized_txins: &[XOutpoint],
+    finalized_txins: &[Outpoint],
     transition_info_list: Vec<TransitionInfo>,
 ) -> (mpc::Commitment, PartialFascia) {
     let contract_ids: Vec<ContractId> = transition_info_list
@@ -403,7 +397,7 @@ pub(crate) fn rgb_commit(
         transition_map
     };
 
-    let mut contract_bundles: BTreeMap<ContractId, BundleDichotomy> = BTreeMap::new();
+    let mut contract_bundles: BTreeMap<ContractId, TransitionBundle> = BTreeMap::new();
     for contract_id in contract_ids {
         let mut input_map = HashMap::<CloseMethod, SmallOrdMap<Vin, OpId>>::new();
         let mut known_transitions = HashMap::<CloseMethod, SmallOrdMap<OpId, Transition>>::new();
@@ -430,7 +424,6 @@ pub(crate) fn rgb_commit(
         for (method, input_map) in input_map {
             let known_transitions = known_transitions.remove(&method).unwrap_or_default();
             bundles.push(TransitionBundle {
-                close_method: method,
                 input_map: InputMap::from(
                     Confined::try_from(input_map.release()).unwrap(), // .map_err(|_| RgbPsbtError::NoTransitions(contract_id))?,
                 ),
@@ -439,20 +432,16 @@ pub(crate) fn rgb_commit(
         }
 
         let mut bundles = bundles.into_iter();
-        let first = bundles.next().unwrap();
+        let bundle = bundles.next().unwrap();
         // .ok_or(RgbPsbtError::NoTransitions(contract_id))?;
 
-        contract_bundles.insert(contract_id, BundleDichotomy::with(first, bundles.next()));
+        contract_bundles.insert(contract_id, bundle);
     }
 
     let merkle_tree = {
         let mpc_messages: BTreeMap<mpc::ProtocolId, mpc::Message> = contract_bundles
             .iter()
-            .map(|(cid, bundles)| {
-                let mut it = bundles.iter();
-                let bundle = it.next().unwrap();
-                debug_assert!(it.next().is_none());
-
+            .map(|(cid, bundle)| {
                 let protocol_id = mpc::ProtocolId::from(*cid);
                 let message = mpc::Message::from(bundle.bundle_id());
                 (protocol_id, message)
@@ -477,7 +466,7 @@ pub(crate) fn rgb_commit(
             AnchorSet::Opret(anchor)
         };
         let bundles =
-            Confined::<BTreeMap<ContractId, BundleDichotomy>, 1, U24>::try_from(contract_bundles)
+            Confined::<BTreeMap<ContractId, TransitionBundle>, 1, U24>::try_from(contract_bundles)
                 .unwrap();
 
         PartialFascia {
@@ -496,7 +485,7 @@ pub(crate) fn rgb_issue(
     details: Option<&str>,
     precision: u8,
     allocations: impl IntoIterator<Item = (String, u64)>,
-    is_testnet: bool,
+    chain_net: ChainNet,
 ) -> ValidContract {
     let issuer = Identity::from_str(issuer).unwrap();
     let precision = Precision::try_from(precision).unwrap();
@@ -513,7 +502,7 @@ pub(crate) fn rgb_issue(
     let scripts = NonInflatableAsset::scripts();
     let types = NonInflatableAsset::types();
 
-    let mut builder = ContractBuilder::with(issuer, iface, schema, iimpl, types, scripts);
+    let mut builder = ContractBuilder::with(issuer, iface, schema, iimpl, types, scripts, chain_net);
     builder = builder
         .add_global_state("spec", spec)
         .expect("invalid RGB20 schema (token specification mismatch)");
@@ -523,8 +512,8 @@ pub(crate) fn rgb_issue(
         issued = issued.checked_add(amount).unwrap();
 
         let seal = OutputSeal::from_str(&seal).unwrap();
-        let seal = GenesisSeal::new_random(seal.method, seal.txid, seal.vout);
-        let seal = BuilderSeal::Revealed(XChain::Bitcoin(seal));
+        let seal = GenesisSeal::new_random(seal.txid, seal.vout);
+        let seal = BuilderSeal::Revealed(seal);
 
         builder = builder
             .add_fungible_state("assetOwner", seal, amount)
@@ -537,10 +526,6 @@ pub(crate) fn rgb_issue(
         .add_global_state("terms", terms)
         .unwrap();
     
-    if !is_testnet {
-        builder = builder.set_mainnet();
-    }
-
     builder.issue_contract().unwrap()
 }
 
@@ -548,27 +533,28 @@ pub(crate) fn rgb_issue(
 pub(crate) fn rgb_transfer<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
     contract_id: ContractId,
-    outputs: &[XOutputSeal],
-    secret_seal: Option<XChain<SecretSeal>>,
+    outputs: &[OutputSeal],
+    secret_seal: Option<SecretSeal>,
+    witness_id: Option<Txid>,
 ) -> Transfer {
-    stock.transfer(contract_id, outputs, secret_seal).unwrap()
+    stock.transfer(contract_id, outputs, secret_seal, witness_id).unwrap()
 }
 
-#[inline]
-fn get_blinding_factor<R: Rng>(rng: &mut R) -> BlindingFactor {
-    let mut failed = 0;
-    loop {
-        let blind: [u8; 32] = rng.gen();
-        match BlindingFactor::try_from(blind) {
-            Ok(blind) => break blind,
-            Err(_) => {
-                if failed < 5 {
-                    failed += 1;
-                    continue
-                } else {
-                    panic!("RNG is broken");
-                }
-            }
-        }
-    }
-}
+// #[inline]
+// fn get_blinding_factor<R: Rng>(rng: &mut R) -> BlindingFactor {
+//     let mut failed = 0;
+//     loop {
+//         let blind: [u8; 32] = rng.gen();
+//         match BlindingFactor::try_from(blind) {
+//             Ok(blind) => break blind,
+//             Err(_) => {
+//                 if failed < 5 {
+//                     failed += 1;
+//                     continue
+//                 } else {
+//                     panic!("RNG is broken");
+//                 }
+//             }
+//         }
+//     }
+// }

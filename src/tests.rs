@@ -18,7 +18,6 @@ use crate::types::{
     ContractId,
 };
 use crate::resolvers::LnResolver;
-use crate::ToRaw;
 
 // TODO: figure out why rgb uses i64 for timestamp
 const GENESIS_TIMESTAMP: i64 = 1231006505;
@@ -54,7 +53,7 @@ fn build_rgb_tx(inputs: &[Outpoint], outputs_num: usize, commitment: &[u8; 32]) 
         .iter()
         .map(|o| {
             TxIn {
-                prev_output: o.to_raw().as_reduced_unsafe().clone(),
+                prev_output: o.clone(),
                 sig_script: SigScript::new(),
                 sequence: SeqNo::from_consensus_u32(u32::MAX),
                 witness: Witness::new(),
@@ -107,21 +106,19 @@ fn get_stock() -> Stock {
 
 #[test]
 fn test_rgb_workflow() {
-    let is_testnet = true;
-
     let tx = get_first_tx();
     let txid = tx.txid();
     dbg!(&txid);
 
     let allocations = [
         (
-            format!("opret1st:{txid}:0"),
+            format!("{txid}:0"),
             100,
         )
     ];
 
     let contract = rgb_issue(
-        "test", "TEST", "TestCoin", "For tests".into(), 8, allocations, is_testnet,
+        "test", "TEST", "TestCoin", "For tests".into(), 8, allocations, "testnet4",
     );
     let contract_id: ContractId  = contract.contract_id().into();
     dbg!(&contract_id);
@@ -172,11 +169,11 @@ fn test_rgb_workflow() {
         // Outpoint::new(txid, 1),
         // Outpoint::new(txid, 2),
     ];
-    let consign = rgb_transfer(&stock, contract_id, &outputs, None);
+    let consign = rgb_transfer(&stock, contract_id, &outputs, None, None);
     dbg!(&consign.consignment_id());
     // dbg!(&consign);
 
-    consign.validate(&resolver, is_testnet).unwrap();
+    consign.validate(&resolver, rgbstd::ChainNet::BitcoinTestnet4).unwrap();
 
     dbg!(rgb_balance(&stock, contract_id, &outputs));
 
@@ -212,13 +209,13 @@ fn test_coloring_consistency() {
 
     let allocations = [
         (
-            format!("opret1st:{genesis_txid}:0"),
+            format!("{genesis_txid}:0"),
             100,
         )
     ];
 
     let contract = rgb_issue(
-        "test", "TEST", "TestCoin", "For tests".into(), 8, allocations, is_testnet,
+        "test", "TEST", "TestCoin", "For tests".into(), 8, allocations, "testnet4",
     );
 
     for _ in 0..10 {
@@ -274,8 +271,8 @@ fn basic_transfer(
         // Outpoint::new(spending_txid, 1),
         // Outpoint::new(spending_txid, 2),
     ];
-    let transfer = rgb_transfer(&stock, contract_id, &outputs, None);
-    let valid_transfer = transfer.validate(&resolver, is_testnet).unwrap();
+    let transfer = rgb_transfer(&stock, contract_id, &outputs, None, None);
+    let valid_transfer = transfer.validate(&resolver, rgbstd::ChainNet::BitcoinTestnet4).unwrap();
 
     let balance = rgb_balance(&stock, contract_id, &outputs);
     assert_eq!(balance, 20);
@@ -286,8 +283,8 @@ fn basic_transfer(
             Outpoint::new(spending_txid, 1),
             // Outpoint::new(spending_txid, 2),
         ];
-        let transfer = rgb_transfer(&stock, contract_id, &outputs, None);
-        let valid_transfer = transfer.validate(&resolver, is_testnet).unwrap();
+        let transfer = rgb_transfer(&stock, contract_id, &outputs, None, None);
+        let valid_transfer = transfer.validate(&resolver, rgbstd::ChainNet::BitcoinTestnet4).unwrap();
 
         let mut stock = get_stock();
         stock.accept_transfer(valid_transfer.clone(), resolver).unwrap();

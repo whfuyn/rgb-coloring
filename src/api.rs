@@ -1,4 +1,3 @@
-use bp::dbc::Method;
 use rand::{Rng, SeedableRng};
 use rgbinvoice::{RgbInvoice, RgbInvoiceBuilder};
 use rgbstd::containers::{Contract, Transfer, ValidContract};
@@ -18,9 +17,18 @@ pub fn rgb_issue(
     details: Option<&str>,
     precision: u8,
     allocations: impl IntoIterator<Item = (String, u64)>,
-    is_testnet: bool,
+    chain_net: &str,
 ) -> ValidContract {
-    detail::rgb_issue(issuer, ticker, name, details, precision, allocations, is_testnet)
+    let chain_net = match chain_net {
+        "bitcoin" => rgbstd::ChainNet::BitcoinMainnet,
+        "regtest" => rgbstd::ChainNet::BitcoinRegtest,
+        "testnet" => rgbstd::ChainNet::BitcoinTestnet3,
+        "testnet4" => rgbstd::ChainNet::BitcoinTestnet4,
+        "signet" => rgbstd::ChainNet::BitcoinSignet,
+        _ => todo!(),
+
+    };
+    detail::rgb_issue(issuer, ticker, name, details, precision, allocations, chain_net)
 }
 
 pub fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
@@ -28,9 +36,6 @@ pub fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
     contract_id: ContractId,
     utxos: &[Outpoint],
 ) -> u64 {
-    let utxos: Vec<RawOutpoint> =
-        utxos.iter().copied().map(ToRaw::to_raw).collect();
-
     detail::rgb_balance(stock, contract_id.to_raw(), &utxos)
 }
 
@@ -38,8 +43,8 @@ pub fn filter_rgb_outpoints<S: StashProvider, H: StateProvider, P: IndexProvider
     stock: &Stock<S, H, P>,
     utxos: &[Outpoint],
 ) -> Vec<Outpoint> {
-    let utxos: Vec<RawOutpoint> =
-        utxos.iter().copied().map(ToRaw::to_raw).collect();
+    // let utxos: Vec<RawOutpoint> =
+    //     utxos.iter().copied().map(ToRaw::to_raw).collect();
 
     detail::filter_rgb_outpoints(stock, &utxos)
         .into_iter()
@@ -52,15 +57,14 @@ pub fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvider>(
     available_utxos: &[Outpoint],
     rgb_assignments: &RgbAssignments,
 ) -> Vec<Outpoint> {
-    let available_utxos: Vec<RawOutpoint> =
-        available_utxos.iter().copied().map(ToRaw::to_raw).collect();
+    // let available_utxos: Vec<RawOutpoint> =
+    //     available_utxos.iter().copied().map(ToRaw::to_raw).collect();
 
     let coins = detail::rgb_coin_select(stock, &available_utxos, rgb_assignments);
     coins
         .into_iter()
         .map(|coin| {
-            let xoutpoint = coin.to_outpoint();
-            let outpoint = xoutpoint.as_reduced_unsafe();
+            let outpoint = coin.to_outpoint();
 
             Outpoint::new(outpoint.txid, outpoint.vout.into_u32())
         })
@@ -104,8 +108,7 @@ pub fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
     let prev_outputs = prev_outputs
         .into_iter()
         .map(|o| {
-            let o = OutputSeal::with(Method::OpretFirst, o.txid.to_raw(), o.vout);
-            XChain::Bitcoin(o)
+            OutputSeal::with(o.txid, o.vout)
         });
 
     let rgb_assignments = rgb_assignments.to_raw_with_blinding_rng(&mut rng);
@@ -116,7 +119,6 @@ pub fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
         prev_outputs,
         rgb_assignments,
         change_seal,
-        &mut rng,
     )
     .unwrap();
 
@@ -131,11 +133,11 @@ pub fn rgb_commit(
     finalized_txins: &[Outpoint],
     transition_info_list: Vec<TransitionInfo>,
 ) -> ([u8; 32], PartialFascia) {
-    let finalized_txins = finalized_txins
-        .iter()
-        .copied()
-        .map(ToRaw::to_raw)
-        .collect::<Vec<_>>();
+    // let finalized_txins = finalized_txins
+    //     .iter()
+    //     .copied()
+    //     .map(ToRaw::to_raw)
+    //     .collect::<Vec<_>>();
 
     let transition_info_list = transition_info_list
         .into_iter()
@@ -152,23 +154,16 @@ pub fn rgb_transfer<S: StashProvider, H: StateProvider, P: IndexProvider>(
     contract_id: ContractId,
     outputs: &[Outpoint],
     secret_seal: Option<[u8; 32]>,
+    witness_tx: Option<Txid>,
 ) -> Transfer {
-    use rgbstd::OutputSeal;
-    use bp::seals::txout::CloseMethod;
-
     let outputs = outputs
         .into_iter()
-        .map(|o| {
-            o
-                .to_raw()
-                .map(|o|
-                    OutputSeal::new(CloseMethod::OpretFirst, o)
-                )
-        })
+        .cloned()
+        .map(rgbstd::OutputSeal::new)
         .collect::<Vec<_>>();
 
-    let secret_seal = secret_seal.map(|s| XChain::with(rgbstd::Layer1::Bitcoin, SecretSeal::from(s)));
-    detail::rgb_transfer(stock, contract_id.to_raw(), &outputs, secret_seal)
+    let secret_seal = secret_seal.map(SecretSeal::from);
+    detail::rgb_transfer(stock, contract_id.to_raw(), &outputs, secret_seal, witness_tx)
 }
 
 pub fn get_empty_stock() -> Stock {
@@ -195,23 +190,22 @@ pub fn rgb_build_invoice<'a, S: StashProvider, H: StateProvider, P: IndexProvide
     beneficiary: Beneficiary,
     transports: impl IntoIterator<Item = &'a str>,
     expiry_secs: Option<u32>,
-    chain_net: rgbinvoice::ChainNet,
+    chain_net: rgbstd::ChainNet,
 ) -> RgbInvoice {
     use rgbstd::GraphSeal;
-    use bp::seals::txout::CloseMethod;
     use commit_verify::Conceal;
 
     let beneficiary = {
         let b = match beneficiary {
             Beneficiary::WitnessVout(vout) => {
-                let seal = GraphSeal::new_random_vout(CloseMethod::OpretFirst, vout);
-                stock.store_secret_seal(XChain::Bitcoin(seal)).unwrap();
+                let seal = GraphSeal::new_random_vout(vout);
+                stock.store_secret_seal(seal).unwrap();
                 // TODO: check
                 rgbinvoice::Beneficiary::BlindedSeal(seal.conceal())
             }
             Beneficiary::Outpoint(outpoint) => {
-                let seal = GraphSeal::new_random(CloseMethod::OpretFirst, outpoint.txid.0, outpoint.vout);
-                stock.store_secret_seal(XChain::Bitcoin(seal)).unwrap();
+                let seal = GraphSeal::new_random(outpoint.txid, outpoint.vout);
+                stock.store_secret_seal(seal).unwrap();
                 rgbinvoice::Beneficiary::BlindedSeal(seal.conceal())
             }
             Beneficiary::SecretSeal(secret_seal) => {
@@ -235,4 +229,15 @@ pub fn rgb_build_invoice<'a, S: StashProvider, H: StateProvider, P: IndexProvide
         .add_transports(transports)
         .unwrap()
         .finish()
+}
+
+pub fn to_rgb_chain_net(bitcoin_network: &str) -> rgbstd::ChainNet {
+    match bitcoin_network {
+        "bitcoin" => rgbstd::ChainNet::BitcoinMainnet,
+        "regtest" => rgbstd::ChainNet::BitcoinRegtest,
+        "testnet" => rgbstd::ChainNet::BitcoinTestnet3,
+        "testnet4" => rgbstd::ChainNet::BitcoinTestnet4,
+        "signet" => rgbstd::ChainNet::BitcoinSignet,
+        _ => todo!(),
+    }
 }

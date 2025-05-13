@@ -8,11 +8,9 @@ pub(crate) use crate::detail::{
 };
 use rand::Rng;
 pub(crate) use rgbstd::{
-    containers::TransitionInfo as RawTransitionInfo, ContractId as RawContractId, Txid as RawTxid,
-    XChain, XOutpoint as RawOutpoint, 
+    containers::TransitionInfo as RawTransitionInfo, ContractId as RawContractId,
     SecretSeal,
 };
-use bp::seals::txout::CloseMethod;
 use rgbstd::GraphSeal;
 
 use serde::Deserialize;
@@ -36,30 +34,32 @@ macro_rules! impl_from_raw {
 }
 
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub struct Txid(pub(crate) RawTxid);
+// #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+// pub struct Txid(pub(crate) RawTxid);
 
-impl From<[u8; 32]> for Txid {
-    fn from(value: [u8; 32]) -> Self {
-        Self(value.into())
-    }
-}
+// impl From<[u8; 32]> for Txid {
+//     fn from(value: [u8; 32]) -> Self {
+//         Self(value.into())
+//     }
+// }
 
-impl Into<[u8; 32]> for Txid {
-    fn into(self) -> [u8; 32] {
-        self.0.as_ref().to_byte_array()
-    }
-}
+// impl Into<[u8; 32]> for Txid {
+//     fn into(self) -> [u8; 32] {
+//         self.0.as_ref().to_byte_array()
+//     }
+// }
 
-impl_from_raw!(Txid);
+// impl_from_raw!(Txid);
 
-impl ToRaw for Txid {
-    type RawType = RawTxid;
+// impl ToRaw for Txid {
+//     type RawType = RawTxid;
 
-    fn to_raw(self) -> Self::RawType {
-        self.0
-    }
-}
+//     fn to_raw(self) -> Self::RawType {
+//         self.0
+//     }
+// }
+
+pub use rgbstd::Txid;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct ContractId(pub(crate) RawContractId);
@@ -106,40 +106,40 @@ impl ToRaw for ContractId {
 }
 
 
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct Outpoint {
-    pub txid: Txid,
-    pub vout: u32,
-}
+// #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
+// pub struct Outpoint {
+//     pub txid: Txid,
+//     pub vout: u32,
+// }
 
-impl Outpoint {
-    pub fn new(txid: impl Into<Txid>, vout: u32) -> Self {
-        let txid = txid.into();
-        Self {
-            txid,
-            vout,
-        }
-    }
-}
+// impl Outpoint {
+//     pub fn new(txid: impl Into<Txid>, vout: u32) -> Self {
+//         let txid = txid.into();
+//         Self {
+//             txid,
+//             vout,
+//         }
+//     }
+// }
 
-impl ToRaw for Outpoint {
-    type RawType = RawOutpoint;
+// // impl ToRaw for Outpoint {
+// //     type RawType = RawOutpoint;
 
-    fn to_raw(self) -> Self::RawType {
-        let outpoint = rgbstd::Outpoint::new(self.txid.to_raw(), self.vout);
-        From::<XChain<rgbstd::Outpoint>>::from(XChain::with(rgbstd::Layer1::Bitcoin, outpoint))
-    }
-}
+// //     fn to_raw(self) -> Self::RawType {
+// //         let outpoint = rgbstd::Outpoint::new(self.txid.to_raw(), self.vout);
+// //         From::<XChain<rgbstd::Outpoint>>::from(XChain::with(rgbstd::Layer1::Bitcoin, outpoint))
+// //     }
+// // }
 
-impl From<RawOutpoint> for Outpoint {
-    fn from(o: RawOutpoint) -> Self {
-        let outpoint = o.as_reduced_unsafe();
-        let txid = outpoint.txid;
-        let vout = outpoint.vout.to_u32();
-        Self::new(txid, vout)
-    }
-}
+// impl From<rgbstd::Outpoint> for Outpoint {
+//     fn from(outpoint: rgbstd::Outpoint) -> Self {
+//         let txid = outpoint.txid;
+//         let vout = outpoint.vout.to_u32();
+//         Self::new(txid, vout)
+//     }
+// }
 
+pub use bp::Outpoint;
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Beneficiary {
@@ -154,7 +154,7 @@ impl Beneficiary {
     }
 
     pub fn new_outpoint(txid: impl Into<Txid>, vout: u32) -> Self {
-        let outpoint = Outpoint::new(txid, vout);
+        let outpoint = Outpoint::new(txid.into(), vout);
         Self::Outpoint(outpoint)
     }
 
@@ -164,18 +164,17 @@ impl Beneficiary {
 
     pub(crate) fn to_raw_with_blinding(self, blinding: u64) -> RawBeneficiary {
         let revealed_seal = |seal| -> RawBeneficiary {
-            From::<XChain<GraphSeal>>::from(XChain::with(rgbstd::Layer1::Bitcoin, seal))
+            From::<GraphSeal>::from(seal)
         };
-        let close_method = CloseMethod::OpretFirst;
         let raw_beneficiary: RawBeneficiary = match self {
             Self::WitnessVout(vout) => {
-                revealed_seal(GraphSeal::with_blinded_vout(close_method, vout, blinding))
+                revealed_seal(GraphSeal::with_blinded_vout(vout, blinding))
             }
             Self::Outpoint(outpoint) => {
-                revealed_seal(GraphSeal::with_blinding(close_method, outpoint.txid.0, outpoint.vout, blinding))
+                revealed_seal(GraphSeal::with_blinding(outpoint.txid, outpoint.vout, blinding))
             }
             Self::SecretSeal(secret_seal) => {
-                let secret_seal = XChain::with(rgbstd::Layer1::Bitcoin, SecretSeal::from(secret_seal));
+                let secret_seal = SecretSeal::from(secret_seal);
                 RawBeneficiary::Concealed(secret_seal)
             }
         };
