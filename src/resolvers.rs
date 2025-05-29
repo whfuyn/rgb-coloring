@@ -173,6 +173,66 @@ impl ResolveWitness for LocalResolver {
 }
 
 
+#[derive(Default, Debug)]
+pub struct WithLocalResolver<T: ResolveWitness> {
+    inner: T,
+    terminal_txes: HashMap<Txid, Tx>,
+}
+
+impl<T: ResolveWitness> WithLocalResolver<T> {
+    pub fn new(inner: T) -> Self {
+        Self {
+            inner,
+            terminal_txes: HashMap::new(),
+        }
+    }
+
+    pub fn add_witness(&mut self, witness: Tx) {
+        self.terminal_txes.insert(witness.txid(), witness);
+    }
+
+    pub fn add_terminals<const TYPE: bool>(&mut self, consignment: &Consignment<TYPE>) {
+        self.terminal_txes.extend(
+            consignment
+                .bundles
+                .iter()
+                .filter_map(|bw| {
+                    match bw.pub_witness.clone() {
+                        PubWitness::Tx(tx) => Some((tx.txid(), tx)),
+                        _ => None,
+                    }
+                })
+        );
+    }
+}
+
+impl<T: ResolveWitness> ResolveWitness for WithLocalResolver<T> {
+    fn resolve_pub_witness(
+        &self,
+        witness_id: Txid,
+    ) -> Result<Tx, WitnessResolverError> {
+        if let Some(tx) = self.terminal_txes.get(&witness_id) {
+            return Ok(tx.clone());
+        }
+        self.inner.resolve_pub_witness(witness_id)
+    }
+
+    fn resolve_pub_witness_ord(
+        &self,
+        witness_id: Txid,
+    ) -> Result<WitnessOrd, WitnessResolverError> {
+        if self.terminal_txes.contains_key(&witness_id) {
+            return Ok(WitnessOrd::Tentative);
+        }
+        self.inner.resolve_pub_witness_ord(witness_id)
+    }
+
+    fn check_chain_net(&self, chain_net: rgbstd::ChainNet) -> Result<(), WitnessResolverError> {
+        self.inner.check_chain_net(chain_net)
+    }
+}
+
+
 #[derive(Debug)]
 pub enum GlobalResolver {
     Online(OnlineResolver),

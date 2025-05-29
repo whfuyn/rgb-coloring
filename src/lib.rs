@@ -25,7 +25,7 @@ pub mod prelude {
     };
 
     pub use crate::api::*;
-    pub use crate::resolvers::{LnResolver, FasciaResolver, LocalResolver, OnlineResolver, GlobalResolver};
+    pub use crate::resolvers::{LnResolver, FasciaResolver, LocalResolver, WithLocalResolver, OnlineResolver, GlobalResolver};
     pub use strict_encoding::{StrictDeserialize, StrictSerialize};
     pub use rgbstd::{
         persistence::Stock,
