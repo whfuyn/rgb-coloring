@@ -168,7 +168,7 @@ pub fn rgb_transfer<S: StashProvider, H: StateProvider, P: IndexProvider>(
 
 pub fn get_empty_stock() -> Stock {
     use schemata::NonInflatableAsset;
-    use ifaces::IssuerWrapper;
+    use rgbstd::contract::IssuerWrapper;
 
     let mut stock = Stock::in_memory();
     stock.import_kit(NonInflatableAsset::kit()).unwrap();
@@ -223,7 +223,7 @@ pub fn rgb_build_invoice<'a, S: StashProvider, H: StateProvider, P: IndexProvide
             .as_secs();
         (timestamp + expiry_secs.unwrap_or(600) as u64) as i64
     };
-    RgbInvoiceBuilder::rgb20(contract_id.to_raw(), beneficiary)
+    RgbInvoiceBuilder::with(contract_id.to_raw(), beneficiary)
         .set_expiry_timestamp(expiry)
         .set_amount_raw(amount)
         .add_transports(transports)

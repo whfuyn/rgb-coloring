@@ -4,17 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rgb-std = { version = "=0.11.1-alpha.1", features = ["fs"]}
-rgb-schemata = "=0.11.1-alpha.1"
-rgb-interfaces = "=0.11.1-alpha.1"
-rgb-invoice = "=0.11.1-alpha.1"
+rgb-std = { version = "=0.11.1-alpha.3", features = ["fs"]}
+rgb-schemata = "=0.11.1-alpha.2"
+rgb-invoice = "=0.11.1-alpha.3"
 
-strict_types = { version = "2.7.0", features = ["serde"] }
-strict_encoding = "2.7.0"
+strict_types = { version = "=2.8.3", features = ["serde"] }
+strict_encoding = "=2.8.2"
 amplify = "4.7.0"
-bp-core = "=0.11.1-alpha.1"
-bp-std = "=0.11.1-alpha.1"
-commit_verify = "=0.11.0"
+bp-core = "0.11.1-alpha.2"
+bp-std = "0.11.1-alpha.2"
+commit_verify = "0.11.1-alpha.2"
 
 esplora-client = { version = "0.10.0", features = ["blocking-https-rustls"] }
 bitcoin = "0.32.2"

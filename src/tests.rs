@@ -1,5 +1,5 @@
 use bp::{*, Tx as BpTx, Outpoint as BpOutpoint};
-use ifaces::IssuerWrapper;
+use rgbstd::contract::IssuerWrapper;
 use rgbstd::persistence::Stock;
 use rgbstd::containers::{ConsignmentExt, ValidContract, ValidTransfer};
 
@@ -173,7 +173,7 @@ fn test_rgb_workflow() {
     dbg!(&consign.consignment_id());
     // dbg!(&consign);
 
-    consign.validate(&resolver, rgbstd::ChainNet::BitcoinTestnet4).unwrap();
+    consign.validate(&resolver, rgbstd::ChainNet::BitcoinTestnet4, None).unwrap();
 
     dbg!(rgb_balance(&stock, contract_id, &outputs));
 
@@ -272,7 +272,7 @@ fn basic_transfer(
         // Outpoint::new(spending_txid, 2),
     ];
     let transfer = rgb_transfer(&stock, contract_id, &outputs, None, None);
-    let valid_transfer = transfer.validate(&resolver, rgbstd::ChainNet::BitcoinTestnet4).unwrap();
+    let valid_transfer = transfer.validate(&resolver, rgbstd::ChainNet::BitcoinTestnet4, None).unwrap();
 
     let balance = rgb_balance(&stock, contract_id, &outputs);
     assert_eq!(balance, 20);
@@ -284,7 +284,7 @@ fn basic_transfer(
             // Outpoint::new(spending_txid, 2),
         ];
         let transfer = rgb_transfer(&stock, contract_id, &outputs, None, None);
-        let valid_transfer = transfer.validate(&resolver, rgbstd::ChainNet::BitcoinTestnet4).unwrap();
+        let valid_transfer = transfer.validate(&resolver, rgbstd::ChainNet::BitcoinTestnet4, None).unwrap();
 
         let mut stock = get_stock();
         stock.accept_transfer(valid_transfer.clone(), resolver).unwrap();

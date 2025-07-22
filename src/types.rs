@@ -62,7 +62,31 @@ macro_rules! impl_from_raw {
 pub use rgbstd::Txid;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
-pub struct ContractId(pub(crate) RawContractId);
+pub struct ContractId(
+    #[serde(serialize_with = "serialize_raw_contract_id")]
+    #[serde(deserialize_with = "deserialize_raw_contract_id")]
+    pub(crate) RawContractId
+);
+
+fn serialize_raw_contract_id<S>(
+    raw: &RawContractId,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&raw.to_string())
+}
+
+fn deserialize_raw_contract_id<'de, D>(
+    deserializer: D,
+) -> Result<RawContractId, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    RawContractId::from_str(&s).map_err(serde::de::Error::custom)
+}
 
 impl ContractId {
     pub fn as_bytes(&self) -> &[u8] {
@@ -144,8 +168,30 @@ pub use bp::Outpoint;
 #[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Beneficiary {
     WitnessVout(u32),
+    #[serde(serialize_with = "serialize_outpoint")]
+    #[serde(deserialize_with = "deserialize_outpoint")]
     Outpoint(Outpoint),
     SecretSeal([u8; 32]),
+}
+
+fn serialize_outpoint<S>(
+    outpoint: &Outpoint,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&outpoint.to_string())
+}
+
+fn deserialize_outpoint<'de, D>(
+    deserializer: D,
+) -> Result<Outpoint, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    Outpoint::from_str(&s).map_err(serde::de::Error::custom)
 }
 
 impl Beneficiary {
