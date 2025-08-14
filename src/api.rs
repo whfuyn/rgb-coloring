@@ -76,7 +76,7 @@ pub fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
     prev_outputs: impl IntoIterator<Item = Outpoint>,
     rgb_assignments: RgbAssignments,
     change_seal: Option<Beneficiary>,
-) -> Vec<TransitionInfo> {
+) -> Vec<Transition> {
     let prev_outputs = prev_outputs
         .into_iter()
         .collect::<Vec<_>>();
@@ -114,7 +114,7 @@ pub fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
     let rgb_assignments = rgb_assignments.to_raw_with_blinding_rng(&mut rng);
     let change_seal = change_seal.map(|s| s.to_raw_with_blinding(rng.gen()));
     
-    let transition_info_list = detail::rgb_compose(
+    let transition_list = detail::rgb_compose(
         stock,
         prev_outputs,
         rgb_assignments,
@@ -122,16 +122,16 @@ pub fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
     )
     .unwrap();
 
-    transition_info_list
+    transition_list
         .into_iter()
-        .map(TransitionInfo)
+        .map(Transition)
         .collect()
 }
 
 pub fn rgb_commit(
     // The order of txins must not be changed after `rgb_commit`
     finalized_txins: &[Outpoint],
-    transition_info_list: Vec<TransitionInfo>,
+    transition_list: Vec<Transition>,
 ) -> ([u8; 32], PartialFascia) {
     // let finalized_txins = finalized_txins
     //     .iter()
@@ -139,12 +139,12 @@ pub fn rgb_commit(
     //     .map(ToRaw::to_raw)
     //     .collect::<Vec<_>>();
 
-    let transition_info_list = transition_info_list
+    let transition_list = transition_list
         .into_iter()
         .map(ToRaw::to_raw)
         .collect();
 
-    let (commitment, partial_fascia) = detail::rgb_commit(&finalized_txins, transition_info_list);
+    let (commitment, partial_fascia) = detail::rgb_commit(&finalized_txins, transition_list);
 
     (commitment.to_byte_array(), partial_fascia)
 }

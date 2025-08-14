@@ -1,6 +1,5 @@
 // TODO: error handling
 
-use std::collections::hash_map::OccupiedEntry;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -9,26 +8,19 @@ use std::str::FromStr;
 
 use amplify::bmap;
 use amplify::confinement::NonEmptyOrdMap;
-use amplify::confinement::SmallOrdMap;
 use amplify::confinement::{Confined, U24};
-use bp::dbc;
-use bp::dbc::{opret::OpretProof, Anchor};
-use bp::seals::txout::CloseMethod;
+use bp::dbc::opret::OpretProof;
 use commit_verify::mpc::{self, MPC_MINIMAL_DEPTH};
 use commit_verify::CommitId as _;
 use commit_verify::TryCommitVerify;
-// use ifaces::IssuerWrapper;
 use rgbstd::containers::Fascia;
 use rgbstd::containers::PubWitness;
 use rgbstd::containers::SealWitness;
 use rgbstd::containers::Transfer;
 use rgbstd::containers::ValidContract;
 use rgbstd::contract::AllocatedState;
-// use rgbstd::interface::BuilderError;
 use rgbstd::contract::ContractBuilder;
-// use rgbstd::interface::IfaceClass;
 use rgbstd::persistence::ComposeError;
-// use rgbstd::persistence::PersistedState;
 use rgbstd::persistence::StockError;
 use rgbstd::stl::AssetSpec;
 use rgbstd::stl::ContractTerms;
@@ -38,22 +30,21 @@ use rgbstd::Amount;
 use rgbstd::ChainNet;
 use rgbstd::GenesisSeal;
 use rgbstd::Identity;
-use rgbstd::InputOpids;
+use rgbstd::KnownTransition;
+use rgbstd::Operation;
 use rgbstd::Opout;
 use rgbstd::OutputSeal;
 use rgbstd::Precision;
 use rgbstd::SecretSeal;
 use rgbstd::Transition;
 use rgbstd::TransitionBundle;
-use rgbstd::Vin;
 use rgbstd::{
     Txid,
-    containers::{BuilderSeal, TransitionInfo},
+    containers::BuilderSeal,
     persistence::{IndexProvider, StashProvider, StateProvider, Stock},
     ContractId, GraphSeal, OpId, Outpoint,
 };
 use schemata::NonInflatableAsset;
-use strict_types::encoding::TypeName;
 
 use bp::{ConsensusDecode as _, Tx};
 use strict_types::FieldName;
@@ -175,13 +166,13 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
     prev_outputs: impl IntoIterator<Item = impl Into<OutputSeal>>,
     rgb_assignments: BTreeMap<ContractId, BTreeMap<Beneficiary, u64>>,
     change_seal: Option<Beneficiary>,
-) -> Result<Vec<TransitionInfo>, StockError<S, H, P, ComposeError>> {
+) -> Result<Vec<Transition>, StockError<S, H, P, ComposeError>> {
     let prev_outputs = prev_outputs
         .into_iter()
         .map(|o| o.into())
         .collect::<HashSet<OutputSeal>>();
 
-    let mut transition_info_list: Vec<TransitionInfo> = vec![];
+    let mut transition_list: Vec<Transition> = vec![];
 
     let transition_name = FieldName::from("transfer");
     let assignment_name = FieldName::from("assetOwner");
@@ -248,10 +239,7 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
         }
 
         let transition = main_builder.complete_transition()?;
-        let transition_info =
-            TransitionInfo::new(transition, main_inputs).unwrap();
-
-        transition_info_list.push(transition_info);
+        transition_list.push(transition);
     }
 
     let mut spent_state =
@@ -287,21 +275,17 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
             continue;
         }
         let transition = blank_builder_opret.complete_transition()?;
-        let info = TransitionInfo::new(transition, outputs_opret).map_err(|_| {
-            // debug_assert!(!matches!(e, TransitionInfoError::CloseMethodDivergence(_)));
-            ComposeError::TooManyInputs
-        })?;
-        transition_info_list.push(info);
+        transition_list.push(transition);
     }
 
     // TODO:
     // check the priority's usage, see also:
     // https://github.com/RGB-WG/RFC/issues/10
-    transition_info_list
+    transition_list
         .iter_mut()
-        .for_each(|ti| ti.transition.nonce = u64::MAX);
+        .for_each(|t| t.nonce = u64::MAX);
 
-    Ok(transition_info_list)
+    Ok(transition_list)
 }
 
 #[derive(Debug)]
@@ -342,67 +326,54 @@ impl PartialFascia {
 }
 
 pub(crate) fn rgb_commit(
-    finalized_txins: &[Outpoint],
-    transition_info_list: Vec<TransitionInfo>,
+    _finalized_txins: &[Outpoint],
+    transition_list: Vec<Transition>,
 ) -> (mpc::Commitment, PartialFascia) {
-    let contract_ids: Vec<ContractId> = transition_info_list
+    let contract_ids: Vec<ContractId> = transition_list
         .iter()
-        .map(|ti| ti.transition.contract_id)
+        .map(|t| t.contract_id)
         .collect();
 
-    let rgb_consumers = {
-        let mut rgb_consumers: HashMap<ContractId, HashMap<Vin, BTreeSet<OpId>>> = HashMap::new();
-        for transition_info in &transition_info_list {
-            let contract_id = transition_info.transition.contract_id;
-            let info_opid = transition_info.id;
+    let (mut input_maps, mut known_transitions) = {
+        let mut input_maps: HashMap<ContractId, BTreeMap<Opout, OpId>> = HashMap::new();
+        let mut known_transitions: HashMap<ContractId, Vec<KnownTransition>> = HashMap::new();
 
-            for outpoint in &transition_info.inputs {
-                let vin = {
-                    let input_pos = finalized_txins
-                        .iter()
-                        .position(|txin| txin == outpoint)
-                        .unwrap();
-                    Vin::from_u32(input_pos as u32)
-                };
-                rgb_consumers
+        for transition in &transition_list {
+            let contract_id = transition.contract_id;
+
+            for opout in &transition.inputs {
+                input_maps
                     .entry(contract_id)
                     .or_default()
-                    .entry(vin)
+                    .entry(opout)
+                    .or_insert(transition.id());
+                known_transitions
+                    .entry(contract_id)
                     .or_default()
-                    .insert(info_opid);
+                    .push(KnownTransition::new(
+                        transition.id(),
+                        transition.clone(),
+                    ));
             }
         }
-        rgb_consumers
+        (input_maps, known_transitions)
     };
 
-    let transition_map = {
-        let mut transition_map = HashMap::new();
-        for transition_info in transition_info_list {
-            let transition = transition_info.transition;
-            let info_opid = transition_info.id;
-            transition_map.insert(info_opid, transition);
-        }
-        transition_map
-    };
+    // let transition_map = {
+    //     let mut transition_map: HashMap<_, Transition> = HashMap::new();
+    //     for transition in transition_list {
+    //         transition_map.insert(transition., transition);
+    //     }
+    //     transition_map
+    // };
 
     let mut contract_bundles: BTreeMap<ContractId, TransitionBundle> = BTreeMap::new();
     for contract_id in contract_ids {
-        let mut input_map = BTreeMap::<Vin, InputOpids>::new();
-        let mut known_transitions = BTreeMap::<OpId, Transition>::new();
+        // let mut input_map = BTreeMap::<Opout, OpId>::new();
+        // let mut known_transitions = Vec::<KnownTransition>::new();
 
-        let rgb_consumer = rgb_consumers.get(&contract_id).unwrap();
-        for (vin, opids) in rgb_consumer {
-            for opid in opids {
-                let Some(transition) = transition_map.get(opid) else {
-                    unreachable!()
-                };
-                known_transitions
-                    .insert(opid.clone(), transition.clone());
-            }
-            let opids = InputOpids::from(Confined::try_from(opids.clone()).unwrap());
-            input_map.insert(vin.clone(), opids);
-
-        }
+        let input_map = input_maps.remove(&contract_id).unwrap();
+        let known_transitions = known_transitions.remove(&contract_id).unwrap();
 
         let bundle = TransitionBundle {
             input_map: Confined::try_from(input_map).unwrap(), // .map_err(|_| RgbPsbtError::NoTransitions(contract_id))?

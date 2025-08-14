@@ -21,7 +21,7 @@ pub use strict_encoding;
 
 pub mod prelude {
     pub use crate::types::{
-        Beneficiary, ContractId, Outpoint, RgbAssignments, TransitionInfo, Txid,
+        Beneficiary, ContractId, Outpoint, RgbAssignments, Transition, Txid,
     };
 
     pub use crate::api::*;

@@ -8,7 +8,7 @@ pub(crate) use crate::detail::{
 };
 use rand::Rng;
 pub(crate) use rgbstd::{
-    containers::TransitionInfo as RawTransitionInfo, ContractId as RawContractId,
+    Transition as RawTransition, ContractId as RawContractId,
     SecretSeal,
 };
 use rgbstd::GraphSeal;
@@ -231,10 +231,10 @@ impl Beneficiary {
 
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct TransitionInfo(pub(crate) RawTransitionInfo);
+pub struct Transition(pub(crate) RawTransition);
 
-impl ToRaw for TransitionInfo {
-    type RawType = RawTransitionInfo;
+impl ToRaw for Transition {
+    type RawType = RawTransition;
 
     fn to_raw(self) -> Self::RawType {
         self.0
