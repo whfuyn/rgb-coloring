@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use rand::{Rng, SeedableRng};
 use rgbinvoice::{RgbInvoice, RgbInvoiceBuilder};
 use rgbstd::containers::{Contract, Transfer, ValidContract};
@@ -37,6 +39,19 @@ pub fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
     utxos: &[Outpoint],
 ) -> u64 {
     detail::rgb_balance(stock, contract_id.to_raw(), &utxos)
+}
+
+pub fn rgb_assignments<S: StashProvider, H: StateProvider, P: IndexProvider>(
+    stock: &Stock<S, H, P>,
+    utxos: &[Outpoint],
+) -> HashMap<ContractId, HashMap<Outpoint, u64>> {
+    detail::rgb_assignments(stock, &utxos)
+        .into_iter()
+        .map(|(cid, map)| {
+            let cid = ContractId::from(cid);
+            (cid, map)
+        })
+        .collect()
 }
 
 pub fn filter_rgb_outpoints<S: StashProvider, H: StateProvider, P: IndexProvider>(

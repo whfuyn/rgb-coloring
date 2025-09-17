@@ -70,12 +70,52 @@ pub(crate) fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
     // .map_err(|e| e.to_string())?;
 
     let amount = contract
-        .fungible(assignment_name, dbg!(utxos))
+        .fungible(assignment_name, utxos)
         .unwrap()
-        .map(|a| dbg!(a.state))
+        .map(|a| a.state)
         .sum::<Amount>();
 
     amount.into()
+}
+
+pub(crate) fn rgb_assignments<S: StashProvider, H: StateProvider, P: IndexProvider>(
+    stock: &Stock<S, H, P>,
+    utxos: &[Outpoint],
+) -> HashMap<ContractId, HashMap<Outpoint, u64>> {
+    let assignment_name = FieldName::from("assetOwner");
+
+    let contracts = stock
+        .contracts()
+        .unwrap()
+        .map(|c| c.id);
+
+    let mut assignments = HashMap::new();
+    
+    for contract_id in contracts {
+        let contract = stock
+            .contract_data(contract_id)
+            .unwrap();
+        // .map_err(|e| e.to_string())?;
+
+        let amounts: HashMap<Outpoint, u64> = contract
+            .fungible(assignment_name.clone(), utxos)
+            .unwrap()
+            .map(|a| (a.seal.to_outpoint(), a.state.value()))
+            .collect();
+
+        let all_amounts: HashMap<Outpoint, u64> = contract
+            .fungible(assignment_name.clone(), utxos)
+            .unwrap()
+            .map(|a| (a.seal.to_outpoint(), a.state.value()))
+            .collect();
+
+        println!("contract_id: {}", contract_id);
+        dbg!(&amounts, &all_amounts);
+
+        assignments.insert(contract_id, amounts);
+    }
+
+    assignments
 }
 
 pub(crate) fn filter_rgb_outpoints<S: StashProvider, H: StateProvider, P: IndexProvider>(
