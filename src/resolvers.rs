@@ -204,6 +204,20 @@ impl<T: ResolveWitness> WithLocalResolver<T> {
                 })
         );
     }
+
+    pub fn add_pending_tx_from_consignment<const TYPE: bool>(&mut self, txid: Txid, consignment: &Consignment<TYPE>) {
+        self.terminal_txes.extend(
+            consignment
+                .bundles
+                .iter()
+                .find_map(|bw| {
+                    match bw.pub_witness.clone() {
+                        PubWitness::Tx(tx) if tx.txid() == txid => Some((tx.txid(), tx)),
+                        _ => None,
+                    }
+                })
+        );
+    }
 }
 
 impl<T: ResolveWitness> ResolveWitness for WithLocalResolver<T> {

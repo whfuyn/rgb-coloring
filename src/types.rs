@@ -12,6 +12,7 @@ pub(crate) use rgbstd::{
     SecretSeal,
 };
 use rgbstd::GraphSeal;
+pub use rgbstd::Txid;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -59,7 +60,6 @@ macro_rules! impl_from_raw {
 //     }
 // }
 
-pub use rgbstd::Txid;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct ContractId(

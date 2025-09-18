@@ -161,8 +161,8 @@ pub(crate) fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvid
 
         let contract = stock
             .contract_data(contract_id.to_raw())
-            .unwrap();
-        // .map_err(|e| e.to_string())?;
+            // .unwrap();
+            .map_err(|e| e.to_string()).unwrap();
 
         let prev_outputs = {
             let state: BTreeMap<_, Vec<Amount>> = contract
