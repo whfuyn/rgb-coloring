@@ -245,8 +245,8 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
                         .unwrap();
                 } else if let AllocatedState::Amount(value) = state {
                     sum_inputs += value.into();
-                } else if let AllocatedState::Data(_data) = state {
-                    todo!()
+                } else {
+                    unimplemented!()
                 }
             }
         }
@@ -396,6 +396,14 @@ pub(crate) fn rgb_commit(
                     ));
             }
         }
+        // TODO: This impl skips double spend check. But since it's constructed by us, it should be fine.
+        known_transitions
+            .values_mut()
+            .for_each(|transitions|{
+                transitions.sort_by_key(|t| t.opid);
+                transitions.dedup_by_key(|t| t.opid);
+
+            });
         (input_maps, known_transitions)
     };
 
