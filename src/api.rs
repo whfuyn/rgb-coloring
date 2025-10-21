@@ -10,6 +10,7 @@ use crate::types::*;
 
 use crate::detail;
 use crate::detail::PartialFascia;
+use crate::error::Result;
 
 
 pub fn rgb_issue(
@@ -37,7 +38,7 @@ pub fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
     contract_id: ContractId,
     utxos: &[Outpoint],
-) -> u64 {
+) -> Result<u64> {
     detail::rgb_balance(stock, contract_id.to_raw(), &utxos)
 }
 
@@ -58,9 +59,6 @@ pub fn filter_rgb_outpoints<S: StashProvider, H: StateProvider, P: IndexProvider
     stock: &Stock<S, H, P>,
     utxos: &[Outpoint],
 ) -> Vec<Outpoint> {
-    // let utxos: Vec<RawOutpoint> =
-    //     utxos.iter().copied().map(ToRaw::to_raw).collect();
-
     detail::filter_rgb_outpoints(stock, &utxos)
         .into_iter()
         .map(|o| Outpoint::from(o))
@@ -71,19 +69,19 @@ pub fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
     available_utxos: &[Outpoint],
     rgb_assignments: &RgbAssignments,
-) -> Vec<Outpoint> {
+) -> Result<Vec<Outpoint>> {
     // let available_utxos: Vec<RawOutpoint> =
     //     available_utxos.iter().copied().map(ToRaw::to_raw).collect();
 
-    let coins = detail::rgb_coin_select(stock, &available_utxos, rgb_assignments);
-    coins
+    let coins = detail::rgb_coin_select(stock, &available_utxos, rgb_assignments)?;
+    Ok(coins
         .into_iter()
         .map(|coin| {
             let outpoint = coin.to_outpoint();
 
             Outpoint::new(outpoint.txid, outpoint.vout.into_u32())
         })
-        .collect()
+        .collect())
 }
 
 pub fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
@@ -168,17 +166,21 @@ pub fn rgb_transfer<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
     contract_id: ContractId,
     outputs: &[Outpoint],
-    secret_seal: Option<[u8; 32]>,
+    secret_seals: &[[u8; 32]],
     witness_tx: Option<Txid>,
-) -> Transfer {
+) -> Result<Transfer> {
     let outputs = outputs
         .into_iter()
         .cloned()
         .map(rgbstd::OutputSeal::new)
         .collect::<Vec<_>>();
 
-    let secret_seal = secret_seal.map(SecretSeal::from);
-    detail::rgb_transfer(stock, contract_id.to_raw(), &outputs, secret_seal, witness_tx)
+    let secret_seals = secret_seals
+        .iter()
+        .cloned()
+        .map(|s| SecretSeal::from(s))
+        .collect::<Vec<_>>();
+    detail::rgb_transfer(stock, contract_id.to_raw(), &outputs, &secret_seals, witness_tx)
 }
 
 pub fn get_empty_stock() -> Stock {

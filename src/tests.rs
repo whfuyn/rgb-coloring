@@ -148,7 +148,7 @@ fn test_rgb_workflow() {
             .add_recipient_for(contract_id, recipient, amount);
     }
 
-    let coins = rgb_coin_select(&stock, &available_utxos, &rgb_assignments);
+    let coins = rgb_coin_select(&stock, &available_utxos, &rgb_assignments).unwrap();
     let ti_list = rgb_compose(&stock, dbg!(coins), rgb_assignments, Some(Beneficiary::WitnessVout(2)));
     // let ti_list = rgb_compose(&stock, dbg!(coins), rgb_assignments, None);
     let (commitment, partial_fascia) = rgb_commit(&available_utxos, ti_list);
@@ -169,11 +169,13 @@ fn test_rgb_workflow() {
         // Outpoint::new(txid, 1),
         // Outpoint::new(txid, 2),
     ];
-    let consign = rgb_transfer(&stock, contract_id, &outputs, None, None);
+    let consign = rgb_transfer(&stock, contract_id, &outputs, &[], None).unwrap();
     dbg!(&consign.consignment_id());
+    dbg!(consign.validate_for_gas());
     // dbg!(&consign);
 
-    consign.validate(&resolver, rgbstd::ChainNet::BitcoinTestnet4, None).unwrap();
+    let validated = consign.validate(&resolver, rgbstd::ChainNet::BitcoinTestnet4, None).unwrap();
+    dbg!(validated.validation_status().gas);
 
     dbg!(rgb_balance(&stock, contract_id, &outputs));
 
@@ -254,7 +256,7 @@ fn basic_transfer(
     let available_utxos = [
         Outpoint::new(genesis_txid, 0),
     ];
-    let prev_outputs = rgb_coin_select(&stock, &available_utxos, &rgb_assignments);
+    let prev_outputs = rgb_coin_select(&stock, &available_utxos, &rgb_assignments).unwrap();
     let ti_list = rgb_compose(&stock, prev_outputs, rgb_assignments, Some(Beneficiary::WitnessVout(2)));
     let (commitment, partial_fascia) = rgb_commit(&available_utxos, ti_list);
 
@@ -271,10 +273,12 @@ fn basic_transfer(
         // Outpoint::new(spending_txid, 1),
         // Outpoint::new(spending_txid, 2),
     ];
-    let transfer = rgb_transfer(&stock, contract_id, &outputs, None, None);
+    let transfer = rgb_transfer(&stock, contract_id, &outputs, &[], None).unwrap();
+    dbg!(transfer.validate_for_gas());
     let valid_transfer = transfer.validate(&resolver, rgbstd::ChainNet::BitcoinTestnet4, None).unwrap();
+    dbg!(valid_transfer.validation_status().gas);
 
-    let balance = rgb_balance(&stock, contract_id, &outputs);
+    let balance = rgb_balance(&stock, contract_id, &outputs).unwrap();
     assert_eq!(balance, 20);
 
     {
@@ -283,13 +287,13 @@ fn basic_transfer(
             Outpoint::new(spending_txid, 1),
             // Outpoint::new(spending_txid, 2),
         ];
-        let transfer = rgb_transfer(&stock, contract_id, &outputs, None, None);
+        let transfer = rgb_transfer(&stock, contract_id, &outputs, &[], None).unwrap();
         let valid_transfer = transfer.validate(&resolver, rgbstd::ChainNet::BitcoinTestnet4, None).unwrap();
 
         let mut stock = get_stock();
         stock.accept_transfer(valid_transfer.clone(), resolver).unwrap();
 
-        let balance = rgb_balance(&stock, contract_id, &outputs);
+        let balance = rgb_balance(&stock, contract_id, &outputs).unwrap();
 
         assert_eq!(balance, 80);
     }

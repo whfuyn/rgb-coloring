@@ -50,6 +50,7 @@ use bp::{ConsensusDecode as _, Tx};
 use strict_types::FieldName;
 
 use crate::ToRaw;
+use crate::error::{Error, Result};
 
 
 // Be careful when using HashMap/HashSet, its iteration order is undefined,
@@ -61,13 +62,12 @@ pub(crate) fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
     contract_id: ContractId,
     utxos: &[Outpoint],
-) -> u64 {
+) -> Result<u64> {
     let assignment_name = FieldName::from("assetOwner");
 
     let contract = stock
         .contract_data(contract_id)
-        .unwrap();
-    // .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::read_contract(e.to_string()))?;
 
     let amount = contract
         .fungible(assignment_name, utxos)
@@ -75,7 +75,7 @@ pub(crate) fn rgb_balance<S: StashProvider, H: StateProvider, P: IndexProvider>(
         .map(|a| a.state)
         .sum::<Amount>();
 
-    amount.into()
+    Ok(amount.into())
 }
 
 pub(crate) fn rgb_assignments<S: StashProvider, H: StateProvider, P: IndexProvider>(
@@ -94,8 +94,7 @@ pub(crate) fn rgb_assignments<S: StashProvider, H: StateProvider, P: IndexProvid
     for contract_id in contracts {
         let contract = stock
             .contract_data(contract_id)
-            .unwrap();
-        // .map_err(|e| e.to_string())?;
+            .expect("contract data should be available");
 
         let amounts: HashMap<Outpoint, u64> = contract
             .fungible(assignment_name.clone(), utxos)
@@ -103,14 +102,14 @@ pub(crate) fn rgb_assignments<S: StashProvider, H: StateProvider, P: IndexProvid
             .map(|a| (a.seal.to_outpoint(), a.state.value()))
             .collect();
 
-        let all_amounts: HashMap<Outpoint, u64> = contract
-            .fungible(assignment_name.clone(), utxos)
-            .unwrap()
-            .map(|a| (a.seal.to_outpoint(), a.state.value()))
-            .collect();
+        // let all_amounts: HashMap<Outpoint, u64> = contract
+        //     .fungible(assignment_name.clone(), utxos)
+        //     .unwrap()
+        //     .map(|a| (a.seal.to_outpoint(), a.state.value()))
+        //     .collect();
 
-        println!("contract_id: {}", contract_id);
-        dbg!(&amounts, &all_amounts);
+        // println!("contract_id: {}", contract_id);
+        // dbg!(&amounts, &all_amounts);
 
         assignments.insert(contract_id, amounts);
     }
@@ -130,8 +129,7 @@ pub(crate) fn filter_rgb_outpoints<S: StashProvider, H: StateProvider, P: IndexP
 
         let contract = stock
             .contract_data(contract_id)
-            .unwrap();
-        // .map_err(|e| e.to_string())?;
+            .expect("contract data should be available");
 
         rgb_outpoints.extend(
             contract
@@ -141,16 +139,14 @@ pub(crate) fn filter_rgb_outpoints<S: StashProvider, H: StateProvider, P: IndexP
         );
     }
 
-    rgb_outpoints
-        .into_iter()
-        .collect()
+    rgb_outpoints.into_iter().collect()
 }
 
 pub(crate) fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvider>(
     stock: &Stock<S, H, P>,
     available_utxos: &[Outpoint],
     rgb_assignments: &crate::types::RgbAssignments,
-) -> Vec<OutputSeal> {
+) -> Result<Vec<OutputSeal>> {
     // Only support RGB20Fixed for now.
     let assignment_name = FieldName::from("assetOwner");
 
@@ -161,8 +157,7 @@ pub(crate) fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvid
 
         let contract = stock
             .contract_data(contract_id.to_raw())
-            // .unwrap();
-            .map_err(|e| e.to_string()).unwrap();
+            .map_err(|e| Error::read_contract(e.to_string()))?;
 
         let prev_outputs = {
             let state: BTreeMap<_, Vec<Amount>> = contract
@@ -198,7 +193,7 @@ pub(crate) fn rgb_coin_select<S: StashProvider, H: StateProvider, P: IndexProvid
     selected_prev_outputs.sort();
     selected_prev_outputs.dedup();
 
-    selected_prev_outputs
+    Ok(selected_prev_outputs)
 }
 
 pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
@@ -206,7 +201,7 @@ pub(crate) fn rgb_compose<S: StashProvider, H: StateProvider, P: IndexProvider>(
     prev_outputs: impl IntoIterator<Item = impl Into<OutputSeal>>,
     rgb_assignments: BTreeMap<ContractId, BTreeMap<Beneficiary, u64>>,
     change_seal: Option<Beneficiary>,
-) -> Result<Vec<Transition>, StockError<S, H, P, ComposeError>> {
+) -> std::result::Result<Vec<Transition>, StockError<S, H, P, ComposeError>> {
     let prev_outputs = prev_outputs
         .into_iter()
         .map(|o| o.into())
@@ -524,15 +519,16 @@ pub(crate) fn rgb_transfer<S: StashProvider, H: StateProvider, P: IndexProvider>
     stock: &Stock<S, H, P>,
     contract_id: ContractId,
     outputs: &[OutputSeal],
-    secret_seal: Option<SecretSeal>,
+    secret_seals: &[SecretSeal],
     witness_id: Option<Txid>,
-) -> Transfer {
-    let secret_seals = if let Some(secret_seal) = secret_seal {
-        vec![secret_seal]
-    } else {
-        vec![]
-    };
-    stock.transfer(contract_id, outputs, secret_seals, witness_id).unwrap()
+) -> Result<Transfer> {
+    // let secret_seals = if let Some(secret_seal) = secret_seal {
+    //     vec![secret_seal]
+    // } else {
+    //     vec![]
+    // };
+    stock.transfer(contract_id, outputs, secret_seals, witness_id)
+        .map_err(|e| Error::transfer(e.to_string()))
 }
 
 // #[inline]
