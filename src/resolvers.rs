@@ -128,6 +128,10 @@ impl LocalResolver {
         Self::default()
     }
 
+    pub fn add_witness(&mut self, witness: Tx) {
+        self.terminal_txes.insert(witness.txid(), witness);
+    }
+
     pub fn add_terminals<const TYPE: bool>(&mut self, consignment: &Consignment<TYPE>) {
         self.terminal_txes.extend(
             consignment
