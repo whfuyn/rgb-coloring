@@ -258,3 +258,47 @@ pub fn to_rgb_chain_net(bitcoin_network: &str) -> rgbstd::ChainNet {
         _ => todo!(),
     }
 }
+
+pub fn consensus_serialize_btc_tx(tx: &bitcoin::Transaction) -> Vec<u8> {
+    use bitcoin::consensus::Encodable;
+
+    let mut buf = Vec::new();
+    tx.consensus_encode(&mut buf).expect("should encode");
+    buf
+}
+
+pub fn create_stock_from_funding_rgb_transfer(funding_rgb_transfer: crate::ValidTransfer) -> Stock {
+    let mut stock = get_empty_stock();
+    let mut resolver = crate::LocalResolver::new();
+    resolver.add_terminals(&funding_rgb_transfer);
+
+    stock.accept_transfer(funding_rgb_transfer, &resolver).unwrap();
+    stock
+}
+
+
+// TODO: use a more effecient implementation to convert between bp and bitcoin types
+pub mod bp2btc {
+    pub fn outpoint_from_bp(bp_outpoint: &bp::Outpoint) -> bitcoin::OutPoint {
+        bp_outpoint.to_string().parse().expect("should be valid bitcoin outpoint")
+    }
+}
+
+pub mod btc2bp {
+    pub fn outpoint_to_bp(btc_outpoint: &bitcoin::OutPoint) -> bp::Outpoint {
+        btc_outpoint.to_string().parse().expect("should be valid bp outpoint")
+    }
+
+    pub fn tx_to_bp(tx: &bitcoin::Transaction) -> bp::Tx {
+        use bitcoin::consensus::Encodable;
+        use bp::ConsensusDecode;
+
+        let mut buf = vec![];
+        tx.consensus_encode(&mut buf).expect("should be serialized");
+        bp::Tx::consensus_deserialize(&buf).expect("should be deserialized")
+    }
+
+    pub fn txid_to_bp(btc_txid: &bitcoin::Txid) -> bp::Txid {
+        btc_txid.to_string().parse().expect("should be valid bp txid")
+    }
+}
