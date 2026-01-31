@@ -7,7 +7,7 @@ mod api;
 mod detail;
 mod types;
 mod resolvers;
-mod error;
+pub mod error;
 
 #[cfg(test)]
 mod tests;
@@ -18,6 +18,7 @@ pub use bp;
 pub use amplify;
 pub use strict_types;
 pub use strict_encoding;
+pub use bitcoin;
 
 pub mod prelude {
     pub use crate::types::{
@@ -25,6 +26,8 @@ pub mod prelude {
     };
 
     pub use crate::api::*;
+    pub use crate::detail::PartialFascia;
+    pub use crate::error;
     pub use crate::resolvers::{LnResolver, FasciaResolver, LocalResolver, WithLocalResolver, OnlineResolver, GlobalResolver};
     pub use strict_encoding::{StrictDeserialize, StrictSerialize};
     pub use rgbstd::{
